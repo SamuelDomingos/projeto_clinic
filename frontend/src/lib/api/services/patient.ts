@@ -1,0 +1,132 @@
+import api, { isAxiosError, ApiError } from '../config';
+import { Patient, MedicalRecord, MedicalReport } from '../types';
+
+export const patientApi = {
+  getPatients: async (): Promise<Patient[]> => {
+    try {
+      const response = await api.get<Patient[]>('/patients');
+      return response.data;
+    } catch (error) {
+      if (isAxiosError(error) && error.response) {
+        throw new Error((error.response.data as ApiError).error);
+      }
+      throw new Error('Erro ao buscar pacientes');
+    }
+  },
+
+  searchPatients: async (searchTerm: string): Promise<Patient[]> => {
+    try {
+      const response = await api.get<Patient[]>(`/patients/search?q=${searchTerm}`);
+      return response.data;
+    } catch (error) {
+      if (isAxiosError(error) && error.response) {
+        throw new Error((error.response.data as ApiError).error);
+      }
+      throw new Error('Erro ao buscar pacientes');
+    }
+  },
+
+  createPatient: async (data: Omit<Patient, 'id' | 'lastVisit' | 'totalSessions' | 'createdAt' | 'updatedAt'>): Promise<Patient> => {
+    try {
+      // Format the data to match backend requirements
+      const formattedData = {
+        ...data,
+        status: data.status || 'active',
+        allergies: data.allergies || [],
+        maritalStatus: data.maritalStatus || 'single'
+      };
+
+      const response = await api.post<Patient>('/patients', formattedData);
+      return response.data;
+    } catch (error) {
+      if (isAxiosError(error) && error.response) {
+        const errorData = error.response.data as ApiError;
+        throw new Error(errorData.error || 'Erro ao criar paciente');
+      }
+      throw new Error('Erro ao criar paciente');
+    }
+  },
+
+  deletePatient: async (id: string): Promise<void> => {
+    try {
+      await api.delete(`/patients/${id}`);
+    } catch (error) {
+      if (isAxiosError(error) && error.response) {
+        throw new Error((error.response.data as ApiError).error);
+      }
+      throw new Error('Erro ao deletar paciente');
+    }
+  }
+};
+
+export const medicalRecordApi = {
+  createRecord: async (data: Omit<MedicalRecord, 'id'>): Promise<MedicalRecord> => {
+    try {
+      const response = await api.post<MedicalRecord>('/medical-records', data);
+      return response.data;
+    } catch (error) {
+      if (isAxiosError(error) && error.response) {
+        throw new Error((error.response.data as ApiError).error);
+      }
+      throw new Error('Erro ao criar registro médico');
+    }
+  },
+
+  getPatientTimeline: async (patientId: string): Promise<MedicalRecord[]> => {
+    try {
+      const response = await api.get<MedicalRecord[]>(`/medical-records/patients/${patientId}/timeline`);
+      return response.data;
+    } catch (error) {
+      if (isAxiosError(error) && error.response) {
+        throw new Error((error.response.data as ApiError).error);
+      }
+      throw new Error('Erro ao buscar histórico do paciente');
+    }
+  },
+
+  addEvolution: async (recordId: string, evolution: string): Promise<MedicalRecord> => {
+    try {
+      const response = await api.post<MedicalRecord>(`/medical-records/${recordId}/evolution`, { evolution });
+      return response.data;
+    } catch (error) {
+      if (isAxiosError(error) && error.response) {
+        throw new Error((error.response.data as ApiError).error);
+      }
+      throw new Error('Erro ao adicionar evolução');
+    }
+  },
+
+  uploadClinicalPhoto: async (recordId: string, photo: File): Promise<MedicalRecord> => {
+    try {
+      const formData = new FormData();
+      formData.append('photo', photo);
+      const response = await api.post<MedicalRecord>(`/medical-records/${recordId}/photos`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return response.data;
+    } catch (error) {
+      if (isAxiosError(error) && error.response) {
+        throw new Error((error.response.data as ApiError).error);
+      }
+      throw new Error('Erro ao fazer upload da foto');
+    }
+  },
+
+  generateReport: async (patientId: string, startDate?: string, endDate?: string): Promise<MedicalReport> => {
+    try {
+      const params = new URLSearchParams();
+      if (startDate) params.append('startDate', startDate);
+      if (endDate) params.append('endDate', endDate);
+      
+      const response = await api.get<MedicalReport>(`/medical-records/patients/${patientId}/report?${params.toString()}`);
+      return response.data;
+    } catch (error) {
+      if (isAxiosError(error) && error.response) {
+        throw new Error((error.response.data as ApiError).error);
+      }
+      throw new Error('Erro ao gerar relatório médico');
+    }
+  }
+}; 
