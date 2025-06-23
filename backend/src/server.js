@@ -19,6 +19,7 @@ const patientServiceSessionRoutes = require("./routes/patientServiceSessionRoute
 const invoiceRoutes = require("./routes/invoiceRoutes.routes");
 const categoryRoutes = require("./routes/category.routes");
 const transactionRoutes = require("./routes/transactionRoutes.routes");
+const os = require("os");
 
 const app = express();
 
@@ -123,8 +124,21 @@ async function startServer() {
 
     // Iniciar servidor
     const PORT = process.env.PORT || 3000;
-    app.listen(PORT, () => {
-      console.log(`Server is running on port ${PORT}`);
+    app.listen(PORT, '0.0.0.0', () => {
+      // Descobrir IP local
+      const interfaces = os.networkInterfaces();
+      let localIp = 'localhost';
+      for (const name of Object.keys(interfaces)) {
+        for (const iface of interfaces[name]) {
+          if (iface.family === 'IPv4' && !iface.internal) {
+            localIp = iface.address;
+            break;
+          }
+        }
+      }
+      console.log('Server is running on:');
+      console.log(`  Local:   http://localhost:${PORT}`);
+      console.log(`  Network: http://${localIp}:${PORT}`);
     });
   } catch (error) {
     console.error("Unable to start server:", error);
