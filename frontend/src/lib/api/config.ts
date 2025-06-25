@@ -7,7 +7,7 @@ export function isAxiosError(error: unknown): error is Error & { response?: { da
 
 // Configuração base do axios
 export const api = axios.create({
-  baseURL: 'http://localhost:3000/api',
+  baseURL: 'http://192.168.15.248:1000/api',
   headers: {
     'Content-Type': 'application/json',
   },
