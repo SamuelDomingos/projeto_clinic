@@ -16,26 +16,7 @@ import {
 import { transactionService } from "@/lib/api/services/transactionService";
 import { categoryService } from "@/lib/api/services/categoryService";
 import { useToast } from "@/components/ui/use-toast";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  Search, 
-  Filter, 
-  Calendar,
-  DollarSign,
-  Edit,
-  Trash2
-} from "lucide-react";
-import { api } from "@/lib/api";
-import { OFXTransaction } from "@/lib/api/types/ofx";
-import { paymentMethodApi } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
-import { Category } from "@/lib/api/types/category";
 
 interface TransactionListItem extends Omit<Transaction, 'id'> {
   id: string;
@@ -48,9 +29,13 @@ export default function Transactions() {
   const { user } = useAuth();
   const [transactions, setTransactions] = useState<TransactionListItem[]>([]);
   const [summary, setSummary] = useState<TransactionSummary>({
-    totalRevenue: 0,
-    totalExpense: 0,
+    revenue: 0,
+    expenses: 0,
     balance: 0,
+    pendingRevenue: 0,
+    pendingExpenses: 0,
+    pendingBalance: 0,
+    totalFees: 0,
   });
   const [filters, setFilters] = useState<TransactionFiltersType>({
     page: 1,
@@ -130,19 +115,18 @@ export default function Transactions() {
 
   const loadSummary = useCallback(async () => {
     try {
-      const response = await transactionService.getSummary(filters);
-      if (response) {
-        setSummary(response);
-      }
+      // Usar o novo endpoint de resumo do servidor
+      const summary = await transactionService.getSummary();
+      setSummary(summary);
     } catch (error) {
       console.error("Erro ao carregar resumo:", error);
-      toast({
-        title: "Erro",
-        description: "Não foi possível carregar o resumo",
-        variant: "destructive",
-      });
+      // Fallback para cálculo local se o endpoint falhar
+      if (transactions.length > 0) {
+        const localSummary = transactionService.calculateSummaryFromList(transactions);
+        setSummary(localSummary);
+      }
     }
-  }, [filters, toast]);
+  }, [transactions]);
 
   useEffect(() => {
     loadCategories();
@@ -155,10 +139,10 @@ export default function Transactions() {
   }, [loadTransactions, categories]);
 
   useEffect(() => {
-    if (categories.length > 0) {
+    if (transactions.length > 0) {
       loadSummary();
     }
-  }, [loadSummary, categories]);
+  }, [loadSummary, transactions]);
 
   const handleCreateTransaction = async (transaction: Partial<Transaction>) => {
     try {
@@ -236,13 +220,12 @@ export default function Transactions() {
           onEdit={(transaction) => {
             setSelectedTransaction({
               ...transaction,
-              updatedAt: transaction.updatedAt || new Date().toISOString(),
-              createdAt: transaction.createdAt || new Date().toISOString(),
-            });
+              id: String(transaction.id),
+            } as Transaction);
             setIsDialogOpen(true);
           }}
           onDelete={async (transaction) => {
-            const isRecorrenteOuParcelada = transaction.reference || /\(\d+\/\d+\)/.test(transaction.description);
+            const isRecorrenteOuParcelada = /\(\d+\/\d+\)/.test(transaction.description);
             if (isRecorrenteOuParcelada) {
               const escolha = window.confirm('Clique em OK para deletar só esta transação. Clique em Cancelar para deletar todas as recorrências/parcelas.');
               if (escolha) {
@@ -276,9 +259,11 @@ export default function Transactions() {
       <OFXImportDialog
         open={showOFXImport}
         onOpenChange={setShowOFXImport}
-        onSuccess={() => {
+        onImport={async (importedTransactions) => {
+          // Aqui você pode salvar as transações importadas no backend
+          // Exemplo: await transactionService.bulkCreate(importedTransactions);
+          // Por enquanto, só recarrega a lista
           loadTransactions();
-          loadSummary();
         }}
       />
     </div>

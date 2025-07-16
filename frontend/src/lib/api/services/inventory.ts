@@ -9,7 +9,7 @@ export const inventoryApi = {
     initialExpiryDate?: string | null;
   }): Promise<Product> => {
     try {
-      const response = await api.post<Product>('/inventory/products', data);
+      const response = await api.post<Product>('/products', data);
       return response.data;
     } catch (error) {
       if (isAxiosError(error) && error.response) {
@@ -22,7 +22,7 @@ export const inventoryApi = {
   // Listar produtos com estoque
   getProducts: async (): Promise<Product[]> => {
     try {
-      const response = await api.get<Product[]>('/inventory/products');
+      const response = await api.get<Product[]>('/products');
       return response.data;
     } catch (error) {
       if (isAxiosError(error) && error.response) {
@@ -32,15 +32,32 @@ export const inventoryApi = {
     }
   },
 
+  // Buscar produto específico com localizações
+  getProduct: async (productId: string): Promise<Product> => {
+    try {
+      const response = await api.get<Product>(`/products/${productId}`);
+      return response.data;
+    } catch (error) {
+      if (isAxiosError(error) && error.response) {
+        throw new Error((error.response.data as ApiError).error);
+      }
+      throw new Error('Erro ao buscar produto');
+    }
+  },
+
   // Adicionar estoque
   addStock: async (data: {
     productId: string;
-    location: string;
+    locationId?: string;
+    locationName?: string;
     quantity: number;
     expiryDate?: string;
+    supplierId?: string;
+    sku?: string;
+    price?: number;
   }): Promise<StockLocation> => {
     try {
-      const response = await api.post<StockLocation>('/inventory/stock/add', data);
+      const response = await api.post<StockLocation>('/stock-movements', { ...data, type: 'in' });
       return response.data;
     } catch (error) {
       if (isAxiosError(error) && error.response) {
@@ -53,12 +70,12 @@ export const inventoryApi = {
   // Remover estoque
   removeStock: async (data: {
     productId: string;
-    location: string;
+    locationId: string;
     quantity: number;
     reason: string;
   }): Promise<StockLocation> => {
     try {
-      const response = await api.post<StockLocation>('/inventory/stock/remove', data);
+      const response = await api.post<StockLocation>('/stock-movements', { ...data, type: 'out' });
       return response.data;
     } catch (error) {
       if (isAxiosError(error) && error.response) {
@@ -71,15 +88,15 @@ export const inventoryApi = {
   // Transferir estoque
   transferStock: async (data: {
     productId: string;
-    fromLocation: string;
-    toLocation: string;
+    fromLocationId: string;
+    toLocationId: string;
     quantity: number;
     reason: string;
   }): Promise<{ fromStock: StockLocation; toStock: StockLocation }> => {
     try {
       const response = await api.post<{ fromStock: StockLocation; toStock: StockLocation }>(
-        '/inventory/stock/transfer',
-        data
+        '/stock-movements',
+        { ...data, type: 'transfer' }
       );
       return response.data;
     } catch (error) {
@@ -93,7 +110,8 @@ export const inventoryApi = {
   // Listar movimentações de um produto
   getMovements: async (productId: string): Promise<StockMovement[]> => {
     try {
-      const response = await api.get<StockMovement[]>(`/inventory/movements/${productId}`);
+      const response = await api.get<StockMovement[]>(`/stock-movements?productId=${productId}`);
+      
       return response.data;
     } catch (error) {
       if (isAxiosError(error) && error.response) {
@@ -105,7 +123,7 @@ export const inventoryApi = {
 
   deleteMovement: async (movementId: string): Promise<void> => {
     try {
-      await api.delete(`/inventory/movements/${movementId}`);
+      await api.delete(`/stock-movements/${movementId}`);
     } catch (error) {
       if (isAxiosError(error) && error.response) {
         throw new Error((error.response.data as ApiError).error);
@@ -116,7 +134,7 @@ export const inventoryApi = {
 
   updateMovement: async (movementId: string, data: { quantity: number; reason: string; location: string }): Promise<StockMovement> => {
     try {
-      const response = await api.put<StockMovement>(`/inventory/movements/${movementId}`, data);
+      const response = await api.put<StockMovement>(`/stock-movements/${movementId}`, data);
       return response.data;
     } catch (error) {
       if (isAxiosError(error) && error.response) {

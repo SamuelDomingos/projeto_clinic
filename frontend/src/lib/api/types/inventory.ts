@@ -16,7 +16,9 @@ export interface StockMovement {
   type: 'in' | 'out' | 'transfer';
   quantity: number;
   reason: string;
-  location: string;
+  location: { id: string; location: string } | null;
+  fromLocation?: { id: string; location: string } | null;
+  toLocation?: { id: string; location: string } | null;
   userId: string;
   notes?: string;
   sku?: string;
@@ -40,7 +42,7 @@ export interface Product {
   specifications: Record<string, string | number | boolean>;
   totalQuantity: number;
   inventoryStatus: 'normal' | 'low' | 'out' | 'expiring';
-  StockLocations?: StockLocation[];
+  stockLocations?: StockLocation[];
   createdAt: string;
   updatedAt: string;
 } 

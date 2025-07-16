@@ -1,19 +1,20 @@
 import api, { isAxiosError, ApiError } from '../config';
 import { Supplier } from '../types';
 
-export const supplierApi = {
-  getSuppliers: async (params?: { name?: string; category?: string; status?: string }): Promise<Supplier[]> => {
-    try {
-      const response = await api.get<Supplier[]>('/suppliers', { params });
-      return response.data;
-    } catch (error) {
-      if (isAxiosError(error) && error.response) {
-        throw new Error((error.response.data as ApiError).error);
-      }
-      throw new Error('Erro ao buscar fornecedores');
+export const getSuppliers = async (params?: { name?: string; category?: string; status?: string }): Promise<Supplier[]> => {
+  try {
+    const response = await api.get<Supplier[]>('/suppliers', { params });
+    return response.data;
+  } catch (error) {
+    if (isAxiosError(error) && error.response) {
+      throw new Error((error.response.data as ApiError).error);
     }
-  },
+    throw new Error('Erro ao buscar fornecedores');
+  }
+};
 
+export const supplierApi = {
+  getSuppliers,
   createSupplier: async (data: Omit<Supplier, 'id' | 'createdAt' | 'updatedAt'>): Promise<Supplier> => {
     try {
       const response = await api.post<Supplier>('/suppliers', data);

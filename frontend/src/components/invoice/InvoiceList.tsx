@@ -68,7 +68,7 @@ export function InvoiceList({
   const [invoiceToDelete, setInvoiceToDelete] = useState<InvoiceWithDetails | null>(null);
 
   const getStatusIcon = (invoice: InvoiceWithDetails) => {
-    const totalPayments = invoice.payments.reduce((sum, payment) => sum + payment.totalValue, 0);
+    const totalPayments = (invoice.payments ?? []).reduce((sum, payment) => sum + payment.totalValue, 0);
     const isFullyPaid = totalPayments >= invoice.total;
     const hasPartialPayment = totalPayments > 0;
 
@@ -88,7 +88,7 @@ export function InvoiceList({
   };
 
   const getStatusLabel = (invoice: InvoiceWithDetails) => {
-    const totalPayments = invoice.payments.reduce((sum, payment) => sum + payment.totalValue, 0);
+    const totalPayments = (invoice.payments ?? []).reduce((sum, payment) => sum + payment.totalValue, 0);
     const isFullyPaid = totalPayments >= invoice.total;
     const hasPartialPayment = totalPayments > 0;
 

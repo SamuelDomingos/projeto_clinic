@@ -7,7 +7,7 @@ export function isAxiosError(error: unknown): error is Error & { response?: { da
 
 // Configuração base do axios
 export const api = axios.create({
-  baseURL: 'http://192.168.15.248:1000/api',
+  baseURL: 'http://192.168.15.171:3000',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -28,7 +28,7 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
-      window.location.href = '/';
+      // Não redirecionar automaticamente, deixar o componente tratar
     }
     return Promise.reject(error);
   }

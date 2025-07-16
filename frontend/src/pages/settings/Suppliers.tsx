@@ -7,6 +7,19 @@ import { SuppliersTable } from "@/components/settings/Supplier/SuppliersTable";
 import { SupplierDialog } from "@/components/settings/Supplier/SupplierDialog";
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "@/components/ui/alert-dialog";
 
+interface SupplierFormData {
+  type: "fornecedor" | "unidade";
+  name: string;
+  company: string;
+  email: string;
+  phone: string;
+  category: string;
+  cnpj: string;
+  address: string;
+  contactPerson: string;
+  status: "active" | "inactive";
+}
+
 export default function SuppliersSettings() {
   const { toast } = useToast();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -76,28 +89,34 @@ export default function SuppliersSettings() {
     }
   };
 
-  const handleSaveSupplier = async (data: Partial<Supplier>) => {
+  const handleSaveSupplier = async (data: SupplierFormData) => {
     try {
+      console.log('Saving supplier data:', data);
+      
       if (selectedSupplier) {
         const response = await supplierApi.updateSupplier(selectedSupplier.id, data);
+        console.log('Update response:', response);
         setSuppliers(prev => prev.map(s => s.id === selectedSupplier.id ? response : s));
         toast({
           title: "Sucesso",
           description: "Fornecedor atualizado com sucesso",
         });
       } else {
-        const createData: CreateSupplierData = {
+        const createData = {
           name: data.name || '',
           ...(data.email && { email: data.email }),
           ...(data.company && { company: data.company }),
           ...(data.phone && { phone: data.phone }),
           ...(data.category && { category: data.category }),
+          ...(data.type && { type: data.type }),
           ...(data.cnpj && { cnpj: data.cnpj }),
           ...(data.address && { address: data.address }),
           ...(data.contactPerson && { contactPerson: data.contactPerson }),
           status: data.status || 'active'
         };
+        console.log('Create data:', createData);
         const response = await supplierApi.createSupplier(createData);
+        console.log('Create response:', response);
         setSuppliers(prev => [...prev, response]);
         toast({
           title: "Sucesso",
@@ -107,6 +126,7 @@ export default function SuppliersSettings() {
       setShowSupplierDialog(false);
       setSelectedSupplier(null);
     } catch (err) {
+      console.error('Error saving supplier:', err);
       toast({
         title: "Erro",
         description: "Erro ao salvar fornecedor",

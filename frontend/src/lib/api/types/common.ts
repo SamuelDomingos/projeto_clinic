@@ -38,6 +38,7 @@ export interface Supplier {
   company?: string;
   phone?: string;
   category?: string;
+  type?: 'fornecedor' | 'unidade';
   cnpj?: string;
   address?: string;
   contactPerson?: string;
@@ -61,6 +62,7 @@ export interface CreateSupplierData {
   email?: string;
   phone?: string;
   category?: string;
+  type?: 'fornecedor' | 'unidade';
   cnpj?: string;
   address?: string;
   website?: string;
@@ -78,6 +80,7 @@ export interface UpdateSupplierData {
   email?: string;
   phone?: string;
   category?: string;
+  type?: 'fornecedor' | 'unidade';
   cnpj?: string;
   address?: string;
   website?: string;

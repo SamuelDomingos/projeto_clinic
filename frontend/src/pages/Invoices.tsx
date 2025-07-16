@@ -17,7 +17,6 @@ export default function Invoices() {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [protocols, setProtocols] = useState<Protocol[]>([]);
 
-  console.log(invoices);
   
 
   const loadData = async () => {
@@ -69,10 +68,10 @@ export default function Invoices() {
     }
   };
 
-  const handleDeleteInvoice = async (id: string) => {
+  const handleDeleteInvoice = async (invoice: InvoiceWithDetails) => {
     try {
-      await invoiceApi.delete(id);
-      setInvoices(invoices.filter(inv => inv.id !== id));
+      await invoiceApi.delete(invoice.id);
+      setInvoices(invoices.filter(inv => inv.id !== invoice.id));
       setViewMode("list");
       toast.success("Registro excluído com sucesso");
     } catch (error) {
@@ -92,7 +91,6 @@ export default function Invoices() {
         type: "budget",
         patientId: formData.patientId,
         performedBy: user.name,
-        date: new Date().toISOString(),
         items: formData.items.map(item => ({
           protocolId: item.protocolId,
           quantity: item.quantity,
@@ -103,8 +101,11 @@ export default function Invoices() {
         payments: [],
         notes: formData.notes || ""
       };
+      console.log('Itens enviados para criação:', formData.items);
+      console.log('Payload enviado para criação de orçamento:', createData);
 
       const newInvoice = await invoiceApi.create(createData);
+      console.log('Fatura criada (resposta do backend):', newInvoice);
 
       const enrichedInvoice: InvoiceWithDetails = {
         ...newInvoice,
@@ -184,6 +185,7 @@ export default function Invoices() {
       onInvoiceClick={handleInvoiceClick}
       onCreateClick={() => setViewMode("create")}
       onExportClick={() => {/* TODO: Implement export */}}
+      onDeleteClick={handleDeleteInvoice}
       loading={loading}
     />
   );

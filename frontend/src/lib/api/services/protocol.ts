@@ -21,7 +21,11 @@ export const protocolApi = {
   getById: async (id: string): Promise<Protocol> => {
     try {
       const response = await api.get<Protocol>(`/protocols/${id}`);
-      return response.data;
+      const protocol = response.data;
+      return {
+        ...protocol,
+        services: protocol.services || protocol.ProtocolServices || []
+      };
     } catch (error) {
       if (isAxiosError(error) && error.response) {
         throw new Error((error.response.data as ApiError).error);
@@ -123,7 +127,7 @@ export const protocolApi = {
   // Available services catalog
   getAvailableServices: async (): Promise<Service[]> => {
     try {
-      const response = await api.get<Service[]>('/services/available');
+      const response = await api.get<Service[]>('/services');
       return response.data;
     } catch (error) {
       if (isAxiosError(error) && error.response) {

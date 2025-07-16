@@ -72,6 +72,9 @@ export function ProductDetailsDialog({
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
+  console.log(movements);
+  
+
   useEffect(() => {
     if (product && isOpen) {
       loadMovements();
@@ -330,8 +333,8 @@ export function ProductDetailsDialog({
               <div className="bg-muted/50 p-4 rounded-lg">
                 <h3 className="font-medium mb-3">Estoque por Localização</h3>
                 <div className="space-y-2">
-                  {product?.StockLocations && product.StockLocations.length > 0 ? (
-                    product.StockLocations.map((location) => (
+                  {product.stockLocations && product.stockLocations.length > 0 ? (
+                    product.stockLocations.map((location) => (
                       <div key={location.location} className="flex items-center justify-between bg-background p-3 rounded-lg border">
                         <div>
                           <p className="font-medium">{location.location}</p>
@@ -378,10 +381,23 @@ export function ProductDetailsDialog({
                         </div>
                         
                         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                          <div className="flex items-center gap-2 text-muted-foreground">
-                            <MapPin className="h-3 w-3" />
-                            <span>{movement.location}</span>
-                          </div>
+                          {movement.type === 'transfer' ? (
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                              <MapPin className="h-3 w-3" />
+                              <span>
+                                {movement.fromLocation?.location || 'Origem desconhecida'}
+                                {" "}
+                                <ArrowRightLeft className="inline h-3 w-3 mx-1" />
+                                {" "}
+                                {movement.toLocation?.location || 'Destino desconhecido'}
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                              <MapPin className="h-3 w-3" />
+                              <span>{typeof movement.location === 'object' && movement.location !== null ? movement.location.location : (movement.location || 'Localização desconhecida')}</span>
+                            </div>
+                          )}
                           {movement.user && (
                             <div className="flex items-center gap-2 text-muted-foreground">
                               <User className="h-3 w-3" />

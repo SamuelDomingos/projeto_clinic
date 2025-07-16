@@ -3,21 +3,20 @@ import { Protocol, ProtocolService } from "@/lib/api";
 import { ProtocolForm } from "./ProtocolForm";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import type { CreateProtocolData } from "@/lib/api";
 
 interface ProtocolDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   protocol?: Protocol | null;
-  onSave: (protocol: Omit<Protocol, "id" | "createdAt" | "updatedAt">) => Promise<void>;
+  onSave: (protocol: CreateProtocolData) => Promise<void>;
 }
 
 interface FormData {
   name: string;
   totalPrice: number;
   services: {
-    name: string;
-    type: 'consultation' | 'injection' | 'massage' | 'drainage' | 'calometry';
-    requiresScheduling: boolean;
+    serviceId: string;
     numberOfSessions: number;
     requiresIntervalControl: boolean;
   }[];
@@ -29,12 +28,10 @@ export function ProtocolDialog({ open, onOpenChange, protocol, onSave }: Protoco
   const handleSubmit = async (data: FormData) => {
     try {
       setIsSubmitting(true);
-      console.log('Form data:', data);
-      
-      const protocolData: Omit<Protocol, "id" | "createdAt" | "updatedAt"> = {
+      const protocolData = {
         name: data.name,
         totalPrice: Number(data.totalPrice),
-        services: data.services.map((service): ProtocolService => ({
+        services: data.services.map((service) => ({
           name: service.name,
           type: service.type,
           requiresScheduling: service.requiresScheduling,
@@ -42,8 +39,6 @@ export function ProtocolDialog({ open, onOpenChange, protocol, onSave }: Protoco
           requiresIntervalControl: service.requiresIntervalControl,
         })),
       };
-      
-      console.log('Protocol data to save:', protocolData);
       await onSave(protocolData);
       toast.success(protocol ? "Protocolo atualizado com sucesso" : "Protocolo criado com sucesso");
       onOpenChange(false);

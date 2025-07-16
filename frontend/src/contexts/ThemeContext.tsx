@@ -50,8 +50,16 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     // Aplicar tema claro/escuro
     if (isDarkMode) {
       document.documentElement.classList.add('dark');
+      setColors(prev => ({
+        ...prev,
+        foreground: '#e6f6ff', // claro no modo escuro
+      }));
     } else {
       document.documentElement.classList.remove('dark');
+      setColors(prev => ({
+        ...prev,
+        foreground: '#0f172a', // escuro no modo claro
+      }));
     }
     
     localStorage.setItem('clinicpro-dark-mode', JSON.stringify(isDarkMode));
