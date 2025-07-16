@@ -44,20 +44,25 @@ export function InvoiceDetails({
   onUpdate, 
   onDelete 
 }: InvoiceDetailsProps) {
+  console.log('Exibindo detalhes da fatura/orçamento:', invoice);
   const [invoiceData, setInvoiceData] = useState(invoice);
   const [items, setItems] = useState<InvoiceItem[]>(
-    invoice.items.map(item => ({
+    (invoice.items ?? []).map(item => ({
       id: item.id,
       protocolId: item.protocolId,
-      quantity: item.quantity,
-      price: parseFloat(item.price.toString()),
-      total: item.total ?? (parseFloat(item.price.toString()) * item.quantity),
+      quantity: item.quantity ?? 1,
+      price: parseFloat(item.price?.toString() ?? "0"),
+      total: item.total !== undefined && item.total !== null
+        ? parseFloat(item.total?.toString() ?? "0")
+        : (parseFloat(item.price?.toString() ?? "0") * (item.quantity ?? 1)),
       createdAt: item.createdAt ?? new Date().toISOString(),
       updatedAt: item.updatedAt ?? new Date().toISOString(),
       protocol: item.protocol
     }))
   );
-  const [discount, setDiscount] = useState(parseFloat(invoice.discount.toString()));
+  const [discount, setDiscount] = useState(
+    parseFloat(invoice.discount?.toString() ?? "0")
+  );
   const [discountType, setDiscountType] = useState(invoice.discountType);
   const [payments, setPayments] = useState<InvoicePayment[]>(invoice.payments || []);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
@@ -311,7 +316,11 @@ export function InvoiceDetails({
           paymentMethod: payment.paymentMethod
         }))
       };
-      await onUpdate(invoiceData.id, updateData);
+      const updatedInvoice = await onUpdate(invoiceData.id, updateData);
+      if (updatedInvoice) {
+        setInvoiceData(updatedInvoice);
+        setPayments(updatedInvoice.payments || []);
+      }
     } catch (error) {
       console.error('Erro ao salvar fatura:', error);
     }
@@ -568,6 +577,19 @@ export function InvoiceDetails({
                             />
                           </div>
                         )}
+                        {/* Para métodos não-cartão, parcelas é sempre 1 e campo desabilitado */}
+                        {payment.paymentMethodId && ['cash', 'pix', 'bank_transfer'].includes(paymentMethods.find(m => m.id === payment.paymentMethodId)?.type || '') && (
+                          <div>
+                            <label className="block text-sm font-medium mb-2 text-foreground">Número de Parcelas</label>
+                            <Input
+                              type="number"
+                              min="1"
+                              value={1}
+                              disabled
+                              className="bg-background border-input opacity-50"
+                            />
+                          </div>
+                        )}
                         <div>
                           <label className="block text-sm font-medium mb-2 text-foreground">
                             {payment.installments > 1 ? 'Valor da Parcela' : 'Valor do Pagamento'}
@@ -576,10 +598,36 @@ export function InvoiceDetails({
                             type="number"
                             step="0.01"
                             value={payment.installmentValue.toString()}
-                            onChange={(e) => updatePayment(payment.id, 'installmentValue', parseFloat(e.target.value) || 0)}
-                            className="bg-background border-input"
+                            onChange={(e) => {
+                              const value = parseFloat(e.target.value) || 0;
+                              updatePayment(payment.id, 'installmentValue', value);
+                              // Para métodos não-cartão, totalValue deve ser igual ao installmentValue
+                              const method = paymentMethods.find(m => m.id === payment.paymentMethodId);
+                              if (method && ['cash', 'pix', 'bank_transfer'].includes(method.type)) {
+                                updatePayment(payment.id, 'totalValue', value);
+                              }
+                            }}
+                            className={`bg-background border-input${!payment.installmentValue ? ' border-red-500' : ''}`}
                           />
                         </div>
+                        {/* Para métodos não-cartão, campo de valor total obrigatório e sempre igual ao installmentValue */}
+                        {payment.paymentMethodId && ['cash', 'pix', 'bank_transfer'].includes(paymentMethods.find(m => m.id === payment.paymentMethodId)?.type || '') && (
+                          <div>
+                            <label className="block text-sm font-medium mb-2 text-foreground">Valor Total do Pagamento</label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={payment.totalValue.toString()}
+                              onChange={(e) => {
+                                const value = parseFloat(e.target.value) || 0;
+                                updatePayment(payment.id, 'totalValue', value);
+                                updatePayment(payment.id, 'installmentValue', value); // sempre igual
+                              }}
+                              className={`bg-background border-input${!payment.totalValue ? ' border-red-500' : ''}`}
+                              required
+                            />
+                          </div>
+                        )}
                         <div className="md:col-span-2">
                           <label className="block text-sm font-medium mb-2 text-foreground">Observações do Pagamento</label>
                           <Input
@@ -589,18 +637,6 @@ export function InvoiceDetails({
                             className="bg-background border-input"
                           />
                         </div>
-                        {payment.installments > 1 && (
-                          <div>
-                            <label className="block text-sm font-medium mb-2 text-foreground">Valor Total do Pagamento</label>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              value={payment.totalValue.toString()}
-                              onChange={(e) => updatePayment(payment.id, 'totalValue', parseFloat(e.target.value) || 0)}
-                              className="bg-background border-input"
-                            />
-                          </div>
-                        )}
                       </div>
                     </div>
                   ))}

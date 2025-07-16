@@ -1,11 +1,13 @@
 export interface Service {
   id: string;
   name: string;
-  description: string;
-  price: number;
-  duration: number;
+  description?: string;
+  price?: number;
+  duration?: number;
   createdAt: string;
   updatedAt: string;
+  type?: ServiceType;
+  requiresScheduling?: boolean;
 }
 
 export type ServiceType = 'consultation' | 'injection' | 'massage' | 'drainage' | 'calometry';

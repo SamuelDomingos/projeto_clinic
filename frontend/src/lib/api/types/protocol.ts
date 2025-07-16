@@ -11,12 +11,30 @@ export interface Service {
 }
 
 export interface ProtocolService {
-  id?: string;
-  name: string;
-  type: ServiceType;
-  requiresScheduling: boolean;
+  id: string;
   numberOfSessions: number;
   requiresIntervalControl: boolean;
+  serviceId?: string;
+  protocolId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  service?: {
+    id: string;
+    name: string;
+    type: string;
+    requiresScheduling: boolean;
+    createdAt: string;
+    // outros campos se necessário
+  };
+  Service?: {
+    id: string;
+    name: string;
+    type: string;
+    requiresScheduling: boolean;
+    createdAt: string;
+    // outros campos se necessário
+  };
+  defaultDuration?: number;
 }
 
 export interface Protocol {
@@ -24,15 +42,23 @@ export interface Protocol {
   name: string;
   totalPrice: number;
   services: ProtocolService[];
-  ProtocolServices?: ProtocolService[];
+  protocolServices?: ProtocolService[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CreateProtocolServiceData {
+  name: string;
+  type: ServiceType;
+  requiresScheduling: boolean;
+  numberOfSessions: number;
+  requiresIntervalControl: boolean;
 }
 
 export interface CreateProtocolData {
   name: string;
   totalPrice: number;
-  services: ProtocolService[];
+  services: CreateProtocolServiceData[];
 }
 
 export interface UpdateProtocolData {

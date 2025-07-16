@@ -60,7 +60,6 @@ export interface CreateInvoiceData {
   patientId: string;
   protocolId?: string;
   performedBy: string;
-  date: string;
   items: Array<{
     protocolId: string;
     quantity: number;

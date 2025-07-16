@@ -22,6 +22,19 @@ import NotFound from "./pages/NotFound";
 import Suppliers from "./pages/settings/Suppliers";
 import Theme from "./pages/settings/Theme";
 import Categories from "./pages/settings/Categories";
+import Health from "./pages/Health/Health";
+import VideoDetail from "./pages/Culture/VideoDetail";
+import VideoPlayer from "./pages/Culture/VideoPlayer";
+import Culture from "./pages/Culture/Culture";
+import QuestionPage from "./pages/Health/Question/QuestionPage";
+import Painel from "./pages/Health/Manager/Painel";
+import IAPage from "./pages/Health/Manager/IAPage";
+import ManagerHealth from "./pages/Health/Manager/ManagerHealth";
+import CategoryForm from "./pages/Health/Category/CategoryForm";
+import QuestionForm from "./pages/Health/Question/QuestionForm";
+import Schedule from "./pages/settings/Schedule";
+import ExecutorConfig from './pages/settings/ExecutorConfig';
+// import Management from "./pages/Management/Management"; // Quando o arquivo existir
 
 const queryClient = new QueryClient();
 
@@ -66,6 +79,18 @@ const AppRoutes = () => {
         <Route path="transactions" element={<Transactions />} />
         <Route path="inventory" element={<Inventory />} />
         <Route path="sessions" element={<Sessions />} />
+        {/* Rotas para Cultura e Saúde */}
+        <Route path="culture" element={<Culture />} />
+        <Route path="health" element={<Health />} />
+        <Route path="health/question" element={<QuestionPage />} />
+        <Route path="health/question/new" element={<QuestionForm />} />
+        <Route path="health/question/:id/edit" element={<QuestionForm />} />
+        <Route path="health/question/:id" element={<QuestionPage />} />
+        <Route path="health/painel" element={<Painel />} />
+        <Route path="health/ia" element={<IAPage />} />
+        <Route path="health/manager" element={<ManagerHealth />} />
+        <Route path="health/category/new" element={<CategoryForm />} />
+        <Route path="health/category/:id/edit" element={<CategoryForm />} />
         <Route path="settings" element={<Settings />}>
           <Route index element={<Navigate to="protocols" replace />} />
           <Route path="protocols" element={<Protocols />} />
@@ -74,8 +99,12 @@ const AppRoutes = () => {
           <Route path="suppliers" element={<Suppliers />} />
           <Route path="categories" element={<Categories />} />
           <Route path="theme" element={<Theme />} />
+          <Route path="schedule" element={<Schedule />} />
+          <Route path="executors/:id" element={<ExecutorConfig />} />
         </Route>
         <Route path="users/:id" element={<UserProfile />} />
+        <Route path="culture/video-detail" element={<VideoDetail />} />
+        <Route path="culture/video-player" element={<VideoPlayer />} />
       </Route>
       
       <Route path="*" element={<NotFound />} />

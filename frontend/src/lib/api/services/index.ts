@@ -6,4 +6,14 @@ export * from './appointment';
 export * from './inventory';
 export * from './user';
 export * from './supplier';
-export * from './paymentMethod'; 
+export * from './paymentMethod';
+export * from './medicalRecord'; 
+
+export * from './chatHistory';
+export * from './iaAnalysis';
+export * from './response';
+export * from './question';
+export * from './questionnaire';
+export * from './categoryQuestionnaire';
+export * from './video'; 
+export * from './schedule'; 

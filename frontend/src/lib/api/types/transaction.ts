@@ -12,7 +12,7 @@ export interface Transaction {
   categoryName?: string;
   dueDate: string;
   status: TransactionStatus;
-  paymentMethod?: PaymentMethod;
+  paymentMethod?: PaymentMethod | string;
   notes?: string;
   branch?: string;
   reference?: string;
@@ -20,6 +20,11 @@ export interface Transaction {
   installmentNumber?: number;
   createdAt: string;
   updatedAt: string;
+  payableAmount?: string;
+  paidAt?: string;
+  paidViaId?: string;
+  documentNumber?: string;
+  boletoNumber?: string;
 }
 
 export interface TransactionCategory {

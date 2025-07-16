@@ -28,13 +28,13 @@ interface SupplierFormData {
 
 interface SupplierFormProps {
   supplier?: Supplier | null;
-  onSave: (data: Omit<SupplierFormData, 'type'>) => Promise<void>;
+  onSave: (data: SupplierFormData) => Promise<void>;
   onCancel: () => void;
 }
 
 const SupplierForm = ({ supplier, onSave, onCancel }: SupplierFormProps) => {
   const [formData, setFormData] = useState<SupplierFormData>({
-    type: "fornecedor",
+    type: supplier?.type || "fornecedor",
     name: supplier?.name || "",
     company: supplier?.company || "",
     email: supplier?.email || "",
@@ -48,8 +48,7 @@ const SupplierForm = ({ supplier, onSave, onCancel }: SupplierFormProps) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const { type, ...dataToSave } = formData;
-    await onSave(dataToSave);
+    await onSave(formData);
   };
 
   return (

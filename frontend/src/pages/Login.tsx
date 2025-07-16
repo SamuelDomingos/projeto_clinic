@@ -17,15 +17,21 @@ export default function Login() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    e.stopPropagation();
     setIsLoading(true);
 
     try {
+      console.log('Tentando fazer login com:', { email });
       await login(email, password);
+      console.log('Login realizado com sucesso');
       toast({
         title: "Login realizado com sucesso!",
         description: "Bem-vindo ao sistema.",
       });
     } catch (error) {
+      console.error('Erro detalhado no login:', error);
+      console.error('Tipo do erro:', typeof error);
+      console.error('Mensagem do erro:', error instanceof Error ? error.message : 'Erro desconhecido');
       toast({
         variant: "destructive",
         title: "Erro ao fazer login",

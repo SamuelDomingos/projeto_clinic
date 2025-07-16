@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { ProtocolDialog } from "@/components/settings/Record/Protocol/ProtocolDialog";
@@ -21,11 +21,45 @@ export default function ProtocolsSettings() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [selectedProtocol, setSelectedProtocol] = useState<Protocol | null>(null);
   const [protocolToDelete, setProtocolToDelete] = useState<string | null>(null);
+  const [protocols, setProtocols] = useState<Protocol[]>([]);
+  const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  const handleEdit = (protocol: Protocol) => {
-    setSelectedProtocol(protocol);
-    setShowDialog(true);
+  const loadProtocols = async () => {
+    try {
+      setLoading(true);
+      const response = await protocolApi.list();
+      setProtocols(Array.isArray(response) ? response : []);
+    } catch (error) {
+      console.error('Erro ao carregar protocolos:', error);
+      setProtocols([]);
+      toast({
+        title: "Erro",
+        description: "Erro ao carregar protocolos",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadProtocols();
+  }, []);
+
+  const handleEdit = async (protocol: Protocol) => {
+    try {
+      const fullProtocol = await protocolApi.getById(protocol.id);
+      console.log('Protocolo detalhado carregado:', fullProtocol);
+      setSelectedProtocol(fullProtocol);
+      setShowDialog(true);
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Erro ao buscar detalhes do protocolo",
+        variant: "destructive"
+      });
+    }
   };
 
   const handleDelete = (id: string) => {
@@ -35,9 +69,9 @@ export default function ProtocolsSettings() {
 
   const confirmDelete = async () => {
     if (!protocolToDelete) return;
-
     try {
       await protocolApi.delete(protocolToDelete);
+      await loadProtocols();
       toast({
         title: "Sucesso",
         description: "Protocolo excluído com sucesso",
@@ -64,6 +98,7 @@ export default function ProtocolsSettings() {
       }
       setShowDialog(false);
       setSelectedProtocol(null);
+      await loadProtocols();
     } catch (error) {
       console.error('Erro ao salvar protocolo:', error);
       throw error; // Propaga o erro para ser tratado no ProtocolDialog
@@ -85,6 +120,8 @@ export default function ProtocolsSettings() {
 
       <div className="rounded-lg border bg-card">
         <ProtocolsTable
+          protocols={protocols}
+          loading={loading}
           onEdit={handleEdit}
           onDelete={handleDelete}
         />

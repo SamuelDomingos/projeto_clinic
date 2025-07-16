@@ -6,26 +6,19 @@ import {
   ShoppingCart,
   MoreVertical,
   Edit,
-  Trash2
+  Trash2,
+  CheckCircle,
+  Circle,
+  Download,
+  SquareCheckBig
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
 import { format, isWithinInterval, startOfMonth, endOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
-
-interface Transaction {
-  id: string | number;
-  type: "revenue" | "expense";
-  amount: number;
-  description: string;
-  category: string;
-  categoryName: string;
-  dueDate: string;
-  status: string;
-  relatedEntityType?: string;
-  createdAt: string;
-}
+import { TransactionDetailsDialog } from "./TransactionDetailsDialog";
+import { Transaction } from "@/lib/api/types/transaction";
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -48,14 +41,19 @@ const getTypeInfo = (transaction: Transaction) => {
       category: "Vendas"
     };
   }
-  if (id.startsWith("stock_")) {
+  // Novo: identifica por nome da categoria
+  if (
+    id.startsWith("stock_") ||
+    transaction.categoryName?.toLowerCase().includes("stock") ||
+    transaction.categoryName?.toLowerCase().includes("estoque")
+  ) {
     return {
       label: "Estoque",
       icon: <TrendingDown className="h-4 w-4 text-orange-600 dark:text-orange-400 mr-1" />,
       badge: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300",
       border: "border-l-4 border-orange-500 dark:border-orange-400",
       valueColor: "text-red-700 dark:text-red-400",
-      category: "Estoque"
+      category: transaction.categoryName
     };
   }
   if (transaction.type === "revenue") {
@@ -88,10 +86,13 @@ export function TransactionList({
   onDelete
 }: TransactionListProps & { onEdit?: (transaction: Transaction) => void, onDelete?: (transaction: Transaction) => void }) {
   const [openMenuId, setOpenMenuId] = useState<string | number | null>(null);
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+
+  console.log(transactions);
+  
 
   const filteredTransactions = useMemo(() => {
-    console.log('Transações recebidas:', transactions);
-    console.log('Filtros atuais:', { searchTerm, typeFilter, categoryFilter, dateFilter });
 
     return transactions.filter(transaction => {
       // Filtro de busca
@@ -134,15 +135,6 @@ export function TransactionList({
         }
       }
 
-      console.log('Transação:', {
-        id: transaction.id,
-        description: transaction.description,
-        type: transaction.type,
-        dueDate: transaction.dueDate,
-        createdAt: transaction.createdAt,
-        matches: { searchMatch, typeMatch, categoryMatch, dateMatch }
-      });
-
       return searchMatch && typeMatch && categoryMatch && dateMatch;
     });
   }, [transactions, searchTerm, typeFilter, categoryFilter, dateFilter]);
@@ -165,12 +157,15 @@ export function TransactionList({
       <table className="w-full table-auto">
         <thead>
           <tr className="border-b border-gray-200 dark:border-gray-700">
-            <th className="text-left p-4 font-medium text-gray-700 dark:text-gray-200">Criação</th>
+            <th className="text-left p-4 font-medium text-gray-700 dark:text-gray-200">Data</th>
             <th className="text-left p-4 font-medium text-gray-700 dark:text-gray-200">Competência</th>
-            <th className="text-left p-4 font-medium text-gray-700 dark:text-gray-200">Tipo</th>
+            <th className="text-left p-4 font-medium text-gray-700 dark:text-gray-200">Pago a / Recebido de</th>
             <th className="text-left p-4 font-medium text-gray-700 dark:text-gray-200">Descrição</th>
-            <th className="text-left p-4 font-medium text-gray-700 dark:text-gray-200">Categoria</th>
-            <th className="text-right p-4 font-medium text-gray-700 dark:text-gray-200">Valor</th>
+            <th className="text-right p-4 font-medium text-gray-700 dark:text-gray-200">Valor R$</th>
+            <th className="text-center p-4 font-medium text-gray-700 dark:text-gray-200">Recebido</th>
+            <th className="text-center p-4 font-medium text-gray-700 dark:text-gray-200">NFSe</th>
+            <th className="text-center p-4 font-medium text-gray-700 dark:text-gray-200">Download</th>
+            <th className="text-center p-4 font-medium text-gray-700 dark:text-gray-200">Baixar</th>
             <th className="text-center p-4 font-medium text-gray-700 dark:text-gray-200">Ações</th>
           </tr>
         </thead>
@@ -180,7 +175,12 @@ export function TransactionList({
               const info = getTypeInfo(transaction);
               const isInstallment = transaction.description.includes('(') && transaction.description.includes('/');
               const isRecurring = transaction.description.includes('recorrente');
-              
+              const isEntrada = transaction.type === 'revenue';
+              const isSaida = transaction.type === 'expense';
+              // Exemplo: status de recebido
+              const recebidoStatus = isEntrada ? (transaction.status === 'completed' ? 'Sim' : 'Não') : '-';
+              // Exemplo: download disponível se houver boleto/documento
+              const hasDownload = Boolean(transaction.reference); // ajuste conforme sua lógica
               return (
                 <motion.tr
                   key={transaction.id}
@@ -193,42 +193,66 @@ export function TransactionList({
                     ease: [0.4, 0, 0.2, 1]
                   }}
                   className={`border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 ${info.border}`}
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => { 
+                    setSelectedTransaction({
+                      ...transaction,
+                      id: String(transaction.id),
+                      updatedAt: transaction.updatedAt || transaction.createdAt
+                    }); 
+                    setDetailsOpen(true); 
+                  }}
                 >
                   <td className="p-4 text-gray-600 dark:text-gray-300">
-                    {format(new Date(transaction.createdAt), "dd/MM/yyyy", { locale: ptBR })}
+                    {transaction.createdAt ? format(new Date(transaction.createdAt), "dd/MM/yyyy", { locale: ptBR }) : "-"}
                   </td>
                   <td className="p-4 text-gray-600 dark:text-gray-300">
-                    {transaction.dueDate ? format(new Date(transaction.dueDate), "dd/MM/yyyy", { locale: ptBR }) : "-"}
+                    {transaction.dueDate ? format(new Date(transaction.dueDate), "MM/yyyy", { locale: ptBR }) : "-"}
                   </td>
-                  <td className="p-4 flex items-center gap-2">
-                    {info.icon}
-                    <Badge className={info.badge}>{info.label}</Badge>
-                    {isInstallment && (
-                      <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
-                        Parcela
-                      </Badge>
-                    )}
-                    {isRecurring && (
-                      <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 dark:bg-purple-900 dark:text-purple-300">
-                        Recorrente
-                      </Badge>
-                    )}
+                  <td className="p-4 text-gray-600 dark:text-gray-300">
+                    {/* Exemplo: campo de pessoa/empresa, ajuste conforme seu modelo */}
+                    {'-'}
                   </td>
                   <td className="p-4 font-medium text-gray-900 dark:text-gray-100">
                     {transaction.description}
                   </td>
-                  <td className="p-4">
-                    <Badge variant="outline" className="text-xs">
-                      {info.category}
-                    </Badge>
-                  </td>
-                  <td className={`p-4 text-right font-bold ${info.valueColor}`}>
+                  <td className={`p-4 text-right font-bold ${info.valueColor}`}> 
                     {formatCurrency(transaction.amount)}
+                  </td>
+                  <td className="p-4 text-center">
+                    {isEntrada ? (
+                      transaction.status === 'completed' ? (
+                        <span title="Recebido">
+                          <CheckCircle className="inline w-5 h-5 text-green-600 dark:text-green-400" />
+                        </span>
+                      ) : (
+                        <span title="Não recebido">
+                          <Circle className="inline w-5 h-5 text-gray-400" />
+                        </span>
+                      )
+                    ) : (
+                      <span className="text-gray-400">-</span>
+                    )}
+                  </td>
+                  <td className="p-4 text-center">-</td>
+                  <td className="p-4 text-center">
+                    {hasDownload ? (
+                      <button title="Download" className="text-blue-600 hover:text-blue-800" onClick={e => { e.stopPropagation(); /* lógica de download */ }}>
+                        <Download className="inline w-5 h-5" />
+                      </button>
+                    ) : (
+                      <span className="text-gray-400">-</span>
+                    )}
+                  </td>
+                  <td className="p-4 text-center">
+                    <button title="Dar baixa" className="text-blue-600 hover:text-blue-800" onClick={e => { e.stopPropagation(); setSelectedTransaction({ ...transaction, id: String(transaction.id), updatedAt: transaction.updatedAt || transaction.createdAt }); setDetailsOpen(true); }}>
+                      <SquareCheckBig className="inline w-5 h-5" />
+                    </button>
                   </td>
                   <td className="p-4 text-center relative">
                     <button
                       className="p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
-                      onClick={() => setOpenMenuId(openMenuId === transaction.id ? null : transaction.id)}
+                      onClick={e => { e.stopPropagation(); setOpenMenuId(openMenuId === transaction.id ? null : transaction.id); }}
                     >
                       <MoreVertical className="w-5 h-5" />
                     </button>
@@ -243,13 +267,13 @@ export function TransactionList({
                         >
                           <button
                             className="flex items-center w-full px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-800"
-                            onClick={() => { onEdit && onEdit(transaction); setOpenMenuId(null); }}
+                            onClick={() => { if (onEdit) { onEdit(transaction); } setOpenMenuId(null); }}
                           >
                             <Edit className="w-4 h-4 mr-2" /> Editar
                           </button>
                           <button
                             className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900"
-                            onClick={() => { onDelete && onDelete(transaction); setOpenMenuId(null); }}
+                            onClick={() => { if (onDelete) { onDelete(transaction); } setOpenMenuId(null); }}
                           >
                             <Trash2 className="w-4 h-4 mr-2" /> Deletar
                           </button>
@@ -263,6 +287,11 @@ export function TransactionList({
           </AnimatePresence>
         </tbody>
       </table>
+      <TransactionDetailsDialog
+        open={detailsOpen}
+        onOpenChange={setDetailsOpen}
+        transaction={selectedTransaction}
+      />
     </div>
   );
 } 

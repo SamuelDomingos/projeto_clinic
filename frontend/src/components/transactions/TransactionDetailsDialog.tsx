@@ -1,0 +1,298 @@
+import React, { useState } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { formatCurrency } from "@/lib/utils";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { Transaction } from "@/lib/api/types/transaction";
+import { Input } from "@/components/ui/input";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { transactionService } from "@/lib/api/services/transactionService";
+
+interface TransactionDetailsDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  transaction: Transaction | null;
+}
+
+// Exemplo de discriminação do lote (para entradas)
+const exampleLoteItems = [
+  {
+    dataTransacao: "24/06/2025",
+    dataAtendimento: "24/06/2025",
+    descricao: "Procedimento - CAMILA BEZERRA DE MENEZES SILVEIRA (Protocolo) - 7/10",
+    nsu: "5903",
+    valor: 899.7,
+    valorLiquido: 879.91,
+  },
+  {
+    dataTransacao: "25/06/2025",
+    dataAtendimento: "25/06/2025",
+    descricao: "Procedimento - RENATA SABÓIA RABELO (Protocolo) - 6/12",
+    nsu: "5915",
+    valor: 375.0,
+    valorLiquido: 366.75,
+  },
+];
+
+export const TransactionDetailsDialog: React.FC<TransactionDetailsDialogProps> = ({ open, onOpenChange, transaction }) => {
+  // Estados para os campos editáveis
+  const [valorPago, setValorPago] = useState('');
+  const [pagoEm, setPagoEm] = useState('');
+  const [formaPagamento, setFormaPagamento] = useState('');
+  const [pagoVia, setPagoVia] = useState('');
+  const [numeroDocumento, setNumeroDocumento] = useState('');
+  const [recebidoEm, setRecebidoEm] = useState('');
+  const [recebidoVia, setRecebidoVia] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!transaction) return null;
+
+  const competencia = transaction.dueDate ? format(new Date(transaction.dueDate), 'MM/yyyy') : '-';
+  const vencimento = transaction.dueDate ? format(new Date(transaction.dueDate), 'dd/MM/yyyy') : '-';
+  const valor = formatCurrency(transaction.amount);
+  const status = transaction.status === 'completed' ? 'Pago' : transaction.status === 'pending' ? 'Pendente' : transaction.status;
+  const isEntrada = transaction.type === 'revenue';
+  const isSaida = transaction.type === 'expense';
+
+  async function handleBaixa(tipo: 'total' | 'parcial') {
+    if (!transaction) return;
+    setLoading(true);
+    setError(null);
+    try {
+      let payload: any = {};
+      if (isSaida) {
+        payload = {
+          payableAmount: valorPago,
+          paidAt: pagoEm,
+          paymentMethod: formaPagamento,
+          paidViaId: pagoVia,
+          documentNumber: numeroDocumento,
+          status: 'completed',
+        };
+      } else if (isEntrada) {
+        payload = {
+          paidAt: recebidoEm,
+          paymentMethod: formaPagamento,
+          paidViaId: recebidoVia,
+          status: 'completed',
+        };
+      }
+      await transactionService.update(transaction.id, payload);
+      onOpenChange(false);
+      // Opcional: recarregar lista, se função passada via prop
+      if (typeof window !== 'undefined') window.location.reload();
+    } catch (e: any) {
+      setError(e?.message || 'Erro ao dar baixa');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="w-[80vw] max-w-[80vw] min-w-[300px] max-h-[95vh] overflow-y-auto p-0 bg-white dark:bg-gray-900">
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between border-b px-4 md:px-8 pt-4 md:pt-6 pb-4 dark:border-gray-800">
+          <div className="flex items-center gap-2 text-lg font-bold">
+            <span className={isSaida ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}>
+              {transaction.categoryName || transaction.category}
+            </span>
+            <span>-</span>
+            <span className="uppercase">{transaction.description}</span>
+          </div>
+          <div className="flex flex-col md:items-end mt-4 md:mt-0 gap-1">
+            {isEntrada && <span className="text-xs text-gray-500 dark:text-gray-400">Data Recebimento</span>}
+            {isSaida && <span className="text-xs text-gray-500 dark:text-gray-400">Vencimento</span>}
+            <span className="text-lg font-semibold">{vencimento}</span>
+            <div className="flex gap-4 mt-2">
+              <div className="flex flex-col items-end">
+                <span className="text-xs text-gray-500 dark:text-gray-400">Valor {isEntrada ? 'R$' : 'original R$'}</span>
+                <span className="text-lg font-bold">{valor}</span>
+              </div>
+              <div className="flex flex-col items-end">
+                <span className="text-xs text-gray-500 dark:text-gray-400">Valor {isEntrada ? 'Líquido R$' : (isSaida ? 'Saldo a pagar R$' : '')}</span>
+                <span className="text-lg font-bold">{valor}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* RECEBIDO VIA para entradas */}
+        {isEntrada && (
+          <div className="flex flex-col md:flex-row justify-between px-4 md:px-8 pt-4 pb-2">
+            <div>
+              <div className="text-xs text-gray-400 dark:text-gray-500">Recebido via</div>
+              <div className="font-medium">-</div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-400 dark:text-gray-500">Data Recebimento</div>
+              <div className="font-medium">-</div>
+            </div>
+          </div>
+        )}
+
+        {/* Grid de informações principais */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-2 px-4 md:px-8 py-4 md:py-6 border-b dark:border-gray-800">
+          <div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Competência</div>
+            <div className="font-medium">{competencia}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Número do documento</div>
+            <div className="font-medium">-</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Unidade</div>
+            <div className="font-medium">-</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Categoria</div>
+            <div className="font-medium">{transaction.categoryName || transaction.category}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Classificação</div>
+            <div className="font-medium">-</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Descrição</div>
+            <div className="font-medium">{transaction.description}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Centro de Custo</div>
+            <div className="font-medium">-</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">%</div>
+            <div className="font-medium">100.00%</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Valor</div>
+            <div className="font-medium">{valor}</div>
+          </div>
+        </div>
+
+        {/* Discriminação do Lote para entradas */}
+        {isEntrada && (
+          <div className="px-4 md:px-8 py-4">
+            <div className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2">Discriminação do Lote</div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm border rounded">
+                <thead>
+                  <tr className="border-b dark:border-gray-700">
+                    <th className="px-2 py-1 text-left font-medium text-gray-700 dark:text-gray-200">Data Transação</th>
+                    <th className="px-2 py-1 text-left font-medium text-gray-700 dark:text-gray-200">Data Atendimento</th>
+                    <th className="px-2 py-1 text-left font-medium text-gray-700 dark:text-gray-200">Descrição</th>
+                    <th className="px-2 py-1 text-left font-medium text-gray-700 dark:text-gray-200">NSU(DOC/CV/ID)</th>
+                    <th className="px-2 py-1 text-right font-medium text-gray-700 dark:text-gray-200">Valor</th>
+                    <th className="px-2 py-1 text-right font-medium text-gray-700 dark:text-gray-200">Valor Líquido</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {exampleLoteItems.map((item, idx) => (
+                    <tr key={idx} className="border-b last:border-0 dark:border-gray-800">
+                      <td className="px-2 py-1 whitespace-nowrap">{item.dataTransacao}</td>
+                      <td className="px-2 py-1 whitespace-nowrap">{item.dataAtendimento}</td>
+                      <td className="px-2 py-1">{item.descricao}</td>
+                      <td className="px-2 py-1">{item.nsu}</td>
+                      <td className="px-2 py-1 text-right">{formatCurrency(item.valor)}</td>
+                      <td className="px-2 py-1 text-right">{formatCurrency(item.valorLiquido)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Seção Dados da Baixa para saídas */}
+        {isSaida && (
+          <div className="bg-blue-50 dark:bg-gray-800/60 rounded-b-lg px-4 md:px-8 py-4 md:py-6 mt-0">
+            <div className="font-semibold text-gray-700 dark:text-gray-200 mb-4">DADOS DA BAIXA</div>
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-x-8 gap-y-4">
+              <div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">Valor pago</div>
+                <Input type="text" value={valorPago} onChange={e => setValorPago(e.target.value)} />
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">Pago em</div>
+                <Input type="date" value={pagoEm} onChange={e => setPagoEm(e.target.value)} />
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">Forma de Pagamento</div>
+                <Select value={formaPagamento} onValueChange={setFormaPagamento}>
+                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="debito">Débito em conta</SelectItem>
+                    <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                    <SelectItem value="pix">Pix</SelectItem>
+                    <SelectItem value="boleto">Boleto</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">Pago via</div>
+                <Select value={pagoVia} onValueChange={setPagoVia}>
+                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="santander">SANTANDER AG MKT</SelectItem>
+                    <SelectItem value="itau">ITAÚ</SelectItem>
+                    <SelectItem value="bradesco">BRADESCO</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">Número do documento</div>
+                <Input type="text" value={numeroDocumento} onChange={e => setNumeroDocumento(e.target.value)} />
+              </div>
+            </div>
+          </div>
+        )}
+        {/* Seção Dados da Baixa para entradas */}
+        {isEntrada && (
+          <div className="bg-blue-50 dark:bg-gray-800/60 rounded-b-lg px-4 md:px-8 py-4 md:py-6 mt-0">
+            <div className="font-semibold text-gray-700 dark:text-gray-200 mb-4">DADOS DA BAIXA</div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-4">
+              <div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">Recebido em</div>
+                <Input type="date" value={recebidoEm} onChange={e => setRecebidoEm(e.target.value)} />
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">Forma de Pagamento</div>
+                <Select value={formaPagamento} onValueChange={setFormaPagamento}>
+                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                    <SelectItem value="pix">Pix</SelectItem>
+                    <SelectItem value="cartao">Cartão</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">Recebido via</div>
+                <Select value={recebidoVia} onValueChange={setRecebidoVia}>
+                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="santander">SANTANDER - MEDCA</SelectItem>
+                    <SelectItem value="itau">ITAÚ</SelectItem>
+                    <SelectItem value="bradesco">BRADESCO</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* Footer */}
+        <div className="flex justify-end gap-2 px-4 md:px-8 py-4 border-t dark:border-gray-800">
+          <button className="px-4 py-2 rounded bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600" onClick={() => onOpenChange(false)} disabled={loading}>
+            Cancelar
+          </button>
+          {isSaida && <button className="px-4 py-2 rounded bg-cyan-600 text-white hover:bg-cyan-700" onClick={() => handleBaixa('parcial')} disabled={loading}>Baixa parcial</button>}
+          <button className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700" onClick={() => handleBaixa('total')} disabled={loading}>{loading ? 'Salvando...' : 'Baixa total'}</button>
+        </div>
+        {error && <div className="text-red-600 text-sm px-8 pb-2">{error}</div>}
+      </DialogContent>
+    </Dialog>
+  );
+}; 

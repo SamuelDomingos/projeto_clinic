@@ -1,42 +1,16 @@
-import { useState, useEffect } from "react";
+import { Protocol } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Trash2} from "lucide-react";
-import { protocolApi, type Protocol } from "@/lib/api";
-import { useToast } from "@/hooks/use-toast";
+import { Trash2 } from "lucide-react";
 
 interface ProtocolsTableProps {
+  protocols: Protocol[];
+  loading: boolean;
   onDelete: (id: string) => void;
   onEdit: (protocol: Protocol) => void;
 }
 
-export function ProtocolsTable({ onDelete, onEdit }: ProtocolsTableProps) {
-  const [protocols, setProtocols] = useState<Protocol[]>([]);
-  const [loading, setLoading] = useState(true);
-  const { toast } = useToast();
-
-  useEffect(() => {
-    loadProtocols();
-  }, []);
-
-  const loadProtocols = async () => {
-    try {
-      setLoading(true);
-      const response = await protocolApi.list();
-      setProtocols(Array.isArray(response) ? response : []);
-    } catch (error) {
-      console.error('Erro ao carregar protocolos:', error);
-      setProtocols([]);
-      toast({
-        title: "Erro",
-        description: "Erro ao carregar protocolos",
-        variant: "destructive"
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
+export function ProtocolsTable({ protocols, loading, onDelete, onEdit }: ProtocolsTableProps) {
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',

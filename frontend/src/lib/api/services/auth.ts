@@ -1,7 +1,7 @@
 import api, { isAxiosError, ApiError } from '../config';
 import { LoginCredentials, LoginResponse, User } from '../types';
 
-export const authApi = {
+export const authService = {
   login: async (credentials: LoginCredentials): Promise<LoginResponse> => {
     try {
       const response = await api.post<LoginResponse>('/auth/login', credentials);

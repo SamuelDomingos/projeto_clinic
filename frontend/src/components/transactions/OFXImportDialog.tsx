@@ -11,6 +11,7 @@ import { OFXTransaction } from "@/lib/api/types/ofx";
 import { api } from "@/lib/api";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Transaction } from "@/lib/api/types/transaction";
+import { transactionService } from "@/lib/api/services/transactionService";
 
 interface Supplier {
   id: string;
@@ -52,6 +53,9 @@ export function OFXImportDialog({
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+
+  console.log(suppliers);
+  
 
   useEffect(() => {
     const fetchData = async () => {
@@ -96,12 +100,10 @@ export function OFXImportDialog({
           }
         });
 
-        const existingTransactions = response.data.transactions.filter((t) => {
+        const existingTransactions = (response.data.transactions || []).filter((t) => {
           // Verifica se a descrição e o valor são similares
-          const descriptionMatch = t.description.toLowerCase().includes(transaction.description.toLowerCase()) ||
-                                 transaction.description.toLowerCase().includes(t.description.toLowerCase());
+          const descriptionMatch = t.description.trim().toLowerCase() === transaction.description.trim().toLowerCase();
           const amountMatch = Math.abs(t.amount - transaction.amount) < 0.01; // Tolerância para diferenças de centavos
-
           return descriptionMatch && amountMatch;
         });
 
@@ -160,6 +162,8 @@ export function OFXImportDialog({
   const handleImport = async () => {
     try {
       setLoading(true);
+      setDuplicateTransactions([]);
+      setShowDuplicateAlert(false);
       const duplicates = await checkForDuplicates(transactions);
       
       if (duplicates.length > 0) {
@@ -168,12 +172,36 @@ export function OFXImportDialog({
         return;
       }
 
-      onImport(transactions);
-      onOpenChange(false);
+      // Converter OFXTransaction para Transaction e salvar usando o endpoint bulk
+      const transactionsToSave = transactions.map(transaction => ({
+        type: transaction.type,
+        amount: transaction.amount,
+        description: transaction.description,
+        category: transaction.category,
+        dueDate: parseDate(transaction.date),
+        status: 'completed' as const,
+        notes: `Importado via OFX - ${transaction.description}`,
+        branch: transaction.branch,
+        reference: transaction.id
+      }));
+
+      const result = await transactionService.createBulk(transactionsToSave);
+      
+      if (result.success) {
+        toast({
+          title: "Importação concluída",
+          description: `${result.count} transações foram importadas com sucesso.`,
+        });
+        onImport(transactions); // Recarrega a lista
+        onOpenChange(false);
+      } else {
+        throw new Error('Falha ao salvar transações');
+      }
     } catch (error) {
+      console.error('[OFX IMPORT ERROR]', error);
       toast({
         title: 'Erro',
-        description: 'Não foi possível verificar duplicatas',
+        description: 'Não foi possível importar as transações',
         variant: 'destructive'
       });
     } finally {
@@ -181,12 +209,63 @@ export function OFXImportDialog({
     }
   };
 
-  const handleConfirmImport = () => {
-    onImport(transactions);
-    onOpenChange(false);
+  const handleConfirmImport = async () => {
+    try {
+      setLoading(true);
+      
+      // Converter OFXTransaction para Transaction e salvar usando o endpoint bulk
+      const transactionsToSave = transactions.map(transaction => ({
+        type: transaction.type,
+        amount: transaction.amount,
+        description: transaction.description,
+        category: transaction.category,
+        dueDate: parseDate(transaction.date),
+        status: 'completed' as const,
+        notes: `Importado via OFX - ${transaction.description}`,
+        branch: transaction.branch,
+        reference: transaction.id
+      }));
+
+      const result = await transactionService.createBulk(transactionsToSave);
+      
+      if (result.success) {
+        toast({
+          title: "Importação concluída",
+          description: `${result.count} transações foram importadas com sucesso.`,
+        });
+        onImport(transactions); // Recarrega a lista
+        onOpenChange(false);
+      } else {
+        throw new Error('Falha ao salvar transações');
+      }
+    } catch (error) {
+      console.error('[OFX IMPORT ERROR]', error);
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível importar as transações',
+        variant: 'destructive'
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Filtra categorias baseado no tipo da transação
+  // Função auxiliar para tratar datas de forma robusta
+  const parseDate = (dateString: string): string => {
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+        // Se a data for inválida, usar a data atual
+        return new Date().toISOString();
+      }
+      return date.toISOString();
+    } catch (error) {
+      // Fallback para data atual se houver erro
+      return new Date().toISOString();
+    }
+  };
+
   const getFilteredCategories = (type: string) => {
     return categories.filter(category => category.type === type);
   };
@@ -293,11 +372,13 @@ export function OFXImportDialog({
                               <SelectValue placeholder="Selecione a filial" />
                             </SelectTrigger>
                             <SelectContent>
-                              {suppliers.map((supplier) => (
-                                <SelectItem key={supplier.id} value={supplier.id}>
-                                  {supplier.name}
-                                </SelectItem>
-                              ))}
+                              {suppliers
+                                .filter((supplier) => supplier.category === "unidade")
+                                .map((supplier) => (
+                                  <SelectItem key={supplier.id} value={supplier.id}>
+                                    {supplier.name}
+                                  </SelectItem>
+                                ))}
                             </SelectContent>
                           </Select>
                         </TableCell>

@@ -32,6 +32,31 @@ export const transactionService = {
     return response.data;
   },
 
+  // Criar múltiplas transações (bulk)
+  createBulk: async (transactions: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>[]): Promise<{
+    success: boolean;
+    count: number;
+    transactions: Transaction[];
+  }> => {
+    const response = await api.post('/transactions/bulk', { transactions });
+    return response.data;
+  },
+
+  // Obter resumo financeiro do servidor
+  getSummary: async (filters?: {
+    startDate?: string;
+    endDate?: string;
+    paymentMethodId?: string;
+  }): Promise<TransactionSummary> => {
+    const params = new URLSearchParams();
+    if (filters?.startDate) params.append('startDate', filters.startDate);
+    if (filters?.endDate) params.append('endDate', filters.endDate);
+    if (filters?.paymentMethodId) params.append('paymentMethodId', filters.paymentMethodId);
+    
+    const response = await api.get(`/transactions/summary?${params.toString()}`);
+    return response.data;
+  },
+
   // Atualizar uma transação
   update: async (id: number, transaction: Partial<Transaction>): Promise<Transaction> => {
     const response = await api.put(`/transactions/${id}`, transaction);
@@ -47,16 +72,30 @@ export const transactionService = {
     await api.delete(`/transactions/${id}?${params.toString()}`);
   },
 
-  // Obter resumo financeiro
-  getSummary: async (filters: Pick<TransactionFilters, 'startDate' | 'endDate' | 'paymentMethodId'>): Promise<TransactionSummary> => {
-    const params = new URLSearchParams();
-    Object.entries(filters).forEach(([key, value]) => {
-      if (value !== undefined) {
-        params.append(key, value.toString());
+  // Calcular resumo financeiro a partir da lista de transações (método local)
+  calculateSummaryFromList: (transactions: Transaction[]): TransactionSummary => {
+    let revenue = 0;
+    let expenses = 0;
+    let pendingRevenue = 0;
+    let pendingExpenses = 0;
+    let totalFees = 0; // Se não houver taxas, manter 0
+    transactions.forEach((t) => {
+      if (t.type === 'revenue') {
+        revenue += Number(t.amount);
+        if (t.status === 'pending') pendingRevenue += Number(t.amount);
+      } else if (t.type === 'expense') {
+        expenses += Number(t.amount);
+        if (t.status === 'pending') pendingExpenses += Number(t.amount);
       }
     });
-
-    const response = await api.get(`/transactions/summary?${params.toString()}`);
-    return response.data;
+    return {
+      revenue,
+      expenses,
+      balance: revenue - expenses,
+      pendingRevenue,
+      pendingExpenses,
+      pendingBalance: pendingRevenue - pendingExpenses,
+      totalFees,
+    };
   },
 }; 

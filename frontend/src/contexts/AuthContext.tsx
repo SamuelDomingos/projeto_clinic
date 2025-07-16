@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { authApi } from '../lib/api';
+import { authService } from '../lib/api';
 import { useNavigate } from 'react-router-dom';
 
 interface User {
@@ -47,7 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const token = localStorage.getItem('token');
     if (token) {
       try {
-        const userData = await authApi.getProfile();
+        const userData = await authService.getProfile();
         setUser(userData);
       } catch (error) {
         console.error('Erro ao verificar autenticação:', error);
@@ -58,21 +58,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function login(email: string, password: string) {
-    try {
-      const response = await authApi.login({ email, password });
-      localStorage.setItem('token', response.token);
-      
-      // Parse permissions se for string
-      const userData = response.user;
-      if (typeof userData.permissions === 'string') {
-        userData.permissions = JSON.parse(userData.permissions);
-      }
-      
-      setUser(userData);
-      navigate('/dashboard');
-    } catch (error) {
-      throw error;
+    const response = await authService.login({ email, password });
+    localStorage.setItem('token', response.token);
+    
+    // Parse permissions se for string
+    const userData = response.user;
+    if (typeof userData.permissions === 'string') {
+      userData.permissions = JSON.parse(userData.permissions);
     }
+    
+    setUser(userData);
+    navigate('/dashboard');
   }
 
   function logout() {

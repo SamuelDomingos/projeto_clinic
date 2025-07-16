@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Users, CreditCard, Palette, Building, Plus, Tag } from "lucide-react";
+import { Users, CreditCard, Palette, Building, Plus, Tag, Calendar } from "lucide-react";
 import { useNavigate, Outlet, useLocation } from "react-router-dom";
 
 export default function Settings() {
@@ -57,6 +57,13 @@ export default function Settings() {
             <Palette className="w-8 h-8 mb-2 text-primary" />
             <CardTitle>Tema</CardTitle>
             <CardDescription>Personalize a aparência do sistema</CardDescription>
+          </CardHeader>
+        </Card>
+        <Card className="hover:shadow-lg transition cursor-pointer" onClick={() => navigate("/settings/schedule")}>
+          <CardHeader>
+            <Calendar className="w-8 h-8 mb-2 text-primary" />
+            <CardTitle>Agenda</CardTitle>
+            <CardDescription>Gerencie as configurações de agenda da clínica</CardDescription>
           </CardHeader>
         </Card>
       </div>

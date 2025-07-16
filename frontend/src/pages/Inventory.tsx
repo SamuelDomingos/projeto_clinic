@@ -90,8 +90,6 @@ export default function Inventory() {
 
   const [showProductForm, setShowProductForm] = useState(false);
 
-  console.log(products);
-
   // Carregar produtos e fornecedores
   useEffect(() => {
     loadProducts();
@@ -102,6 +100,7 @@ export default function Inventory() {
     try {
       setLoading(true);
       const data = await inventoryApi.getProducts();
+      console.log('Produtos carregados:', data);
       setProducts(data);
     } catch (error) {
       toast({
@@ -131,11 +130,11 @@ export default function Inventory() {
   };
 
   // Adicionar estoque
-  const handleAddStock = async (productId: string, location: string, quantity: number, expiryDate?: string, supplierId?: string, sku?: string, price?: number) => {
+  const handleAddStock = async (productId: string, locationId: string, quantity: number, expiryDate?: string, supplierId?: string, sku?: string, price?: number) => {
     try {
       await inventoryApi.addStock({ 
         productId, 
-        location, 
+        locationId, 
         quantity, 
         expiryDate, 
         supplierId, 
@@ -157,9 +156,9 @@ export default function Inventory() {
   };
 
   // Remover estoque
-  const handleRemoveStock = async (productId: string, location: string, quantity: number, reason: string) => {
+  const handleRemoveStock = async (productId: string, locationId: string, quantity: number, reason: string) => {
     try {
-      await inventoryApi.removeStock({ productId, location, quantity, reason });
+      await inventoryApi.removeStock({ productId, locationId, quantity, reason });
       await loadProducts();
       toast({
         title: "Sucesso",
@@ -175,12 +174,12 @@ export default function Inventory() {
   };
 
   // Transferir estoque
-  const handleTransferStock = async (productId: string, fromLocation: string, toLocation: string, quantity: number, reason: string) => {
+  const handleTransferStock = async (productId: string, fromLocationId: string, toLocationId: string, quantity: number, reason: string) => {
     try {
       await inventoryApi.transferStock({ 
         productId, 
-        fromLocation, 
-        toLocation, 
+        fromLocationId, 
+        toLocationId, 
         quantity, 
         reason 
       });
@@ -239,13 +238,21 @@ export default function Inventory() {
   });
 
   const handleProductClick = async (product: ProductWithDetails) => {
-    setSelectedProduct(product);
+    try {
+      // Buscar o produto atualizado do backend
+      const updatedProduct = await inventoryApi.getProduct(product.id);
+      console.log('Produto atualizado:', updatedProduct);
+      setSelectedProduct(updatedProduct);
+    } catch (error) {
+      console.error('Erro ao buscar produto atualizado:', error);
+      setSelectedProduct(product);
+    }
     setIsProductDialogOpen(true);
   };
 
   const handleAddMovement = async (data: {
     productId: string;
-    location: string;
+    locationId: string;
     quantity: number;
     expiryDate?: string;
     supplierId?: string;
@@ -253,10 +260,10 @@ export default function Inventory() {
     price?: number;
   }) => {
     try {
-      const { productId, location, quantity, expiryDate, supplierId, sku, price } = data;
-      await inventoryApi.addMovement({
+      const { productId, locationId, quantity, expiryDate, supplierId, sku, price } = data;
+      await inventoryApi.addStock({
         productId,
-        location,
+        locationId,
         quantity,
         expiryDate,
         supplierId,
@@ -437,9 +444,31 @@ export default function Inventory() {
                 ) : (
                   <div className="space-y-2">
                     <Label htmlFor="product">Selecione o Produto</Label>
+                    {products.length === 0 ? (
+                      <div className="mt-2 p-4 bg-blue-50 border border-blue-300 text-blue-800 dark:bg-blue-900/20 dark:border-blue-700 dark:text-blue-300 rounded text-sm">
+                        Nenhum produto cadastrado ainda. Crie um produto primeiro para poder fazer movimentações de estoque.
+                      </div>
+                    ) : (
                     <Select
                       value={selectedProduct?.id || ''}
-                      onValueChange={(value) => setSelectedProduct(products.find(p => p.id === value) || null)}
+                      onValueChange={async (value) => {
+                        const product = products.find(p => p.id === value);
+                        if (product) {
+                          // Buscar o produto completo com localizações atualizadas
+                          try {
+                            console.log('Buscando produto completo:', product.id);
+                            const fullProduct = await inventoryApi.getProduct(product.id);
+                            console.log('Produto completo recebido:', fullProduct);
+                            setSelectedProduct(fullProduct);
+                          } catch (error) {
+                            console.error('Erro ao buscar produto completo:', error);
+                            // Se não conseguir buscar o produto completo, usar o produto da lista
+                            setSelectedProduct(product);
+                          }
+                        } else {
+                          setSelectedProduct(null);
+                        }
+                      }}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Selecione um produto" />
@@ -452,6 +481,7 @@ export default function Inventory() {
                         ))}
                       </SelectContent>
                     </Select>
+                    )}
                   </div>
                 )}
               </div>
@@ -637,7 +667,7 @@ export default function Inventory() {
                             <div>
                               <p className="font-medium text-foreground">{product.name}</p>
                               <p className="text-sm text-muted-foreground">
-                                {product.StockLocations?.map(loc => `${loc.location}: ${loc.quantity} ${product.unit}`).join(', ')}
+                                {product.stockLocations?.map(loc => `${loc.location}: ${loc.quantity} ${product.unit}`).join(', ') || 'Sem localização'}
                               </p>
                             </div>
                             
@@ -668,23 +698,43 @@ export default function Inventory() {
         isOpen={isProductDialogOpen}
         onOpenChange={setIsProductDialogOpen}
         product={selectedProduct}
-        onEdit={(product) => {
-          setSelectedProduct(product);
+        onEdit={async (product) => {
+          try {
+            const updatedProduct = await inventoryApi.getProduct(product.id);
+            setSelectedProduct(updatedProduct);
+          } catch (error) {
+            setSelectedProduct(product);
+          }
           setMovementType('transferencia');
           setIsCreateDialogOpen(true);
         }}
-        onTransfer={(product) => {
-          setSelectedProduct(product);
+        onTransfer={async (product) => {
+          try {
+            const updatedProduct = await inventoryApi.getProduct(product.id);
+            setSelectedProduct(updatedProduct);
+          } catch (error) {
+            setSelectedProduct(product);
+          }
           setMovementType('transferencia');
           setIsCreateDialogOpen(true);
         }}
-        onAddStock={(product) => {
-          setSelectedProduct(product);
+        onAddStock={async (product) => {
+          try {
+            const updatedProduct = await inventoryApi.getProduct(product.id);
+            setSelectedProduct(updatedProduct);
+          } catch (error) {
+            setSelectedProduct(product);
+          }
           setMovementType('entrada');
           setIsCreateDialogOpen(true);
         }}
-        onRemoveStock={(product) => {
-          setSelectedProduct(product);
+        onRemoveStock={async (product) => {
+          try {
+            const updatedProduct = await inventoryApi.getProduct(product.id);
+            setSelectedProduct(updatedProduct);
+          } catch (error) {
+            setSelectedProduct(product);
+          }
           setMovementType('saida');
           setIsCreateDialogOpen(true);
         }}
@@ -820,17 +870,29 @@ export default function Inventory() {
                   <Label htmlFor="transfer-from">Origem</Label>
                   <Select
                     value={movementForm.origin}
-                    onValueChange={(value) => setMovementForm(prev => ({ ...prev, origin: value }))}
+                    onValueChange={(value) => {
+                      setMovementForm(prev => ({ 
+                        ...prev, 
+                        origin: value,
+                        quantity: 0 // Reset quantity when origin changes
+                      }));
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione a origem" />
                     </SelectTrigger>
                     <SelectContent>
-                      {selectedProduct.StockLocations?.map((location) => (
-                        <SelectItem key={location.location} value={location.location}>
-                          {location.location}
+                      {selectedProduct.stockLocations && selectedProduct.stockLocations.length > 0 ? (
+                        selectedProduct.stockLocations.map((location) => (
+                          <SelectItem key={location.location} value={location.location}>
+                            {location.location}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="" disabled>
+                          Nenhuma localização disponível
                         </SelectItem>
-                      ))}
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -845,7 +907,7 @@ export default function Inventory() {
                     </SelectTrigger>
                     <SelectContent>
                       {stockUnits.map((unit) => (
-                        <SelectItem key={unit.id} value={unit.name}>
+                        <SelectItem key={unit.name} value={unit.name}>
                           {unit.name}
                         </SelectItem>
                       ))}
@@ -859,9 +921,58 @@ export default function Inventory() {
                 <Input
                   id="transfer-quantity"
                   type="number"
+                  min="1"
+                  max={(() => {
+                    if (movementForm.origin && selectedProduct?.stockLocations) {
+                      const originLocation = selectedProduct.stockLocations.find(
+                        loc => loc.location === movementForm.origin
+                      );
+                      return originLocation?.quantity || 0;
+                    }
+                    return 0;
+                  })()}
                   value={movementForm.quantity}
-                  onChange={(e) => setMovementForm(prev => ({ ...prev, quantity: Number(e.target.value) }))}
+                  onChange={(e) => {
+                    const value = Number(e.target.value);
+                    const maxQuantity = (() => {
+                      if (movementForm.origin && selectedProduct?.stockLocations) {
+                        const originLocation = selectedProduct.stockLocations.find(
+                          loc => loc.location === movementForm.origin
+                        );
+                        return originLocation?.quantity || 0;
+                      }
+                      return 0;
+                    })();
+                    
+                    setMovementForm(prev => ({ 
+                      ...prev, 
+                      quantity: Math.min(value, maxQuantity)
+                    }));
+                  }}
                 />
+                {movementForm.origin && selectedProduct?.stockLocations && (
+                  <div className="text-sm text-muted-foreground">
+                    Disponível: {(() => {
+                      const originLocation = selectedProduct.stockLocations.find(
+                        loc => loc.location === movementForm.origin
+                      );
+                      return originLocation?.quantity || 0;
+                    })()} {selectedProduct.unit}
+                  </div>
+                )}
+                {movementForm.quantity > (() => {
+                  if (movementForm.origin && selectedProduct?.stockLocations) {
+                    const originLocation = selectedProduct.stockLocations.find(
+                      loc => loc.location === movementForm.origin
+                    );
+                    return originLocation?.quantity || 0;
+                  }
+                  return 0;
+                })() && (
+                  <div className="text-sm text-red-600">
+                    Quantidade excede o estoque disponível!
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -882,6 +993,20 @@ export default function Inventory() {
                   Cancelar
                 </Button>
                 <Button
+                  disabled={
+                    !movementForm.origin ||
+                    !movementForm.destination ||
+                    movementForm.quantity <= 0 ||
+                    movementForm.quantity > (() => {
+                      if (movementForm.origin && selectedProduct?.stockLocations) {
+                        const originLocation = selectedProduct.stockLocations.find(
+                          loc => loc.location === movementForm.origin
+                        );
+                        return originLocation?.quantity || 0;
+                      }
+                      return 0;
+                    })()
+                  }
                   onClick={async () => {
                     try {
                       if (selectedProduct) {
@@ -940,7 +1065,7 @@ export default function Inventory() {
                     </SelectTrigger>
                     <SelectContent>
                       {stockUnits.map((unit) => (
-                        <SelectItem key={unit.id} value={unit.name}>
+                        <SelectItem key={unit.name} value={unit.name}>
                           {unit.name}
                         </SelectItem>
                       ))}
@@ -991,7 +1116,7 @@ export default function Inventory() {
                       if (selectedProduct) {
                         await handleAddMovement({
                           productId: selectedProduct.id,
-                          location: movementForm.destination,
+                          locationId: movementForm.destination,
                           quantity: movementForm.quantity,
                           expiryDate: movementForm.expiryDate,
                           supplierId: selectedProduct.supplierId,
@@ -1045,7 +1170,7 @@ export default function Inventory() {
                       <SelectValue placeholder="Selecione a localização" />
                     </SelectTrigger>
                     <SelectContent>
-                      {selectedProduct.StockLocations?.map((location) => (
+                      {selectedProduct.stockLocations?.map((location) => (
                         <SelectItem key={location.location} value={location.location}>
                           {location.location}
                         </SelectItem>

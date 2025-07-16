@@ -53,7 +53,7 @@ export function PaymentMethodDetails({ method, isOpen, onClose, onSave }: Paymen
           userApi.list(),
           supplierApi.getSuppliers()
         ]);
-        setUsers(usersResponse.data);
+        setUsers(usersResponse);
         setSuppliers(Array.isArray(suppliersResponse) ? suppliersResponse.filter(s => s.category === 'conta') : []);
       } catch (error) {
         console.error('Error loading data:', error);
@@ -168,53 +168,67 @@ export function PaymentMethodDetails({ method, isOpen, onClose, onSave }: Paymen
                       <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
                     </div>
                   ) : personType === 'pf' ? (
-                    <Select
-                      value={formData.beneficiaryId}
-                      onValueChange={(value) => {
-                        const selectedUser = users.find(u => u.id === value);
-                        setFormData({ 
-                          ...formData, 
-                          beneficiaryId: value, 
-                          beneficiaryType: 'user',
-                          machineName: selectedUser?.name || ''
-                        });
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione o usuário" />
-                      </SelectTrigger>
-                      <SelectContent>
-                          {(users || []).map((user) => (
-                          <SelectItem key={user.id} value={user.id}>
-                            {user.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <>
+                      <Select
+                        value={formData.beneficiaryId}
+                        onValueChange={(value) => {
+                          const selectedUser = users.find(u => u.id === value);
+                          setFormData({ 
+                            ...formData, 
+                            beneficiaryId: value, 
+                            beneficiaryType: 'user',
+                            machineName: selectedUser?.name || ''
+                          });
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione o usuário" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {(users || []).map((user) => (
+                            <SelectItem key={user.id} value={user.id}>
+                              {user.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {users.length === 0 && (
+                        <div className="mt-2 p-2 bg-yellow-50 border border-yellow-300 text-yellow-800 rounded text-sm">
+                          Nenhum usuário disponível para seleção. Cadastre um usuário antes de criar uma forma de pagamento.
+                        </div>
+                      )}
+                    </>
                   ) : (
-                    <Select
-                      value={formData.beneficiaryId}
-                      onValueChange={(value) => {
-                        const selectedSupplier = suppliers.find(s => s.id === value);
-                        setFormData({ 
-                          ...formData, 
-                          beneficiaryId: value, 
-                          beneficiaryType: 'supplier',
-                          machineName: selectedSupplier?.name || ''
-                        });
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione a conta bancária" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(suppliers || []).map((supplier) => (
-                          <SelectItem key={supplier.id} value={supplier.id}>
-                            {supplier.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <>
+                      <Select
+                        value={formData.beneficiaryId}
+                        onValueChange={(value) => {
+                          const selectedSupplier = suppliers.find(s => s.id === value);
+                          setFormData({ 
+                            ...formData, 
+                            beneficiaryId: value, 
+                            beneficiaryType: 'supplier',
+                            machineName: selectedSupplier?.name || ''
+                          });
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione a conta bancária" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(suppliers || []).map((supplier) => (
+                            <SelectItem key={supplier.id} value={supplier.id}>
+                              {supplier.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {suppliers.length === 0 && (
+                        <div className="mt-2 p-2 bg-yellow-50 border border-yellow-300 text-yellow-800 rounded text-sm">
+                          Nenhuma conta bancária disponível para seleção. Cadastre uma conta bancária antes de criar uma forma de pagamento.
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </div>

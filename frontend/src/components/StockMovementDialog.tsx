@@ -39,21 +39,37 @@ export function StockMovementDialog({
     expiryDate: '',
     supplierId: '',
     sku: '',
-    price: 0
+    price: 0,
+    newDestinationName: '' // novo campo para nome de unidade
   });
 
-  // Filtrar apenas fornecedores (não unidades de estoque)
-  const actualSuppliers = suppliersList.filter(supplier => supplier.category !== 'estoque');
+  // Filtrar apenas fornecedores (não unidades)
+  const actualSuppliers = suppliersList.filter(supplier => 
+    supplier.type === 'fornecedor' || 
+    (supplier.type === undefined && supplier.category !== 'estoque')
+  );
+
+  console.log(product);
+  
 
   const handleSubmit = async () => {
     if (!product) return;
 
     try {
       switch (type) {
-        case 'entrada':
+        case 'entrada': {
+          // Só permite entrada se houver unidade selecionada
+          if (!movementForm.destination) {
+            toast({
+              title: 'Erro',
+              description: 'Selecione uma unidade de estoque para dar entrada.',
+              variant: 'destructive'
+            });
+            return;
+          }
           await inventoryApi.addStock({
             productId: product.id,
-            location: movementForm.destination,
+            locationId: movementForm.destination,
             quantity: movementForm.quantity,
             expiryDate: movementForm.expiryDate,
             supplierId: movementForm.supplierId,
@@ -61,10 +77,11 @@ export function StockMovementDialog({
             price: movementForm.price
           });
           break;
+        }
         case 'saida':
           await inventoryApi.removeStock({
             productId: product.id,
-            location: movementForm.origin,
+            locationId: movementForm.origin,
             quantity: movementForm.quantity,
             reason: movementForm.reason
           });
@@ -72,8 +89,8 @@ export function StockMovementDialog({
         case 'transferencia':
           await inventoryApi.transferStock({
             productId: product.id,
-            fromLocation: movementForm.origin,
-            toLocation: movementForm.destination,
+            fromLocationId: movementForm.origin,
+            toLocationId: movementForm.destination,
             quantity: movementForm.quantity,
             reason: movementForm.reason
           });
@@ -92,7 +109,8 @@ export function StockMovementDialog({
         expiryDate: '',
         supplierId: '',
         sku: '',
-        price: 0
+        price: 0,
+        newDestinationName: ''
       });
 
       toast({
@@ -136,7 +154,7 @@ export function StockMovementDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{getTitle()}</DialogTitle>
         </DialogHeader>
@@ -145,7 +163,7 @@ export function StockMovementDialog({
             {/* Informações do Produto */}
             <div className="bg-muted/50 p-4 rounded-lg">
               <h3 className="font-medium mb-2">Informações do Produto</h3>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm text-muted-foreground">Nome</p>
                   <p className="font-medium">{product.name}</p>
@@ -167,7 +185,7 @@ export function StockMovementDialog({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {type !== 'entrada' && (
                 <div className="space-y-2">
                   <Label htmlFor="movement-origin">Origem</Label>
@@ -179,21 +197,38 @@ export function StockMovementDialog({
                       <SelectValue placeholder="Selecione a origem" />
                     </SelectTrigger>
                     <SelectContent>
-                      {product.StockLocations?.map((location) => (
-                        <SelectItem key={location.location} value={location.location}>
-                          <div className="flex justify-between items-center w-full">
-                            <span>{location.location}</span>
-                            <span className="text-muted-foreground ml-2">
-                              {location.quantity} {product.unit}
-                            </span>
-                          </div>
-                        </SelectItem>
-                      ))}
+                      {product.stockLocations && product.stockLocations.length > 0
+                        ? product.stockLocations
+                            .filter(location => location.id && location.location)
+                            .map(location => (
+                              <SelectItem key={location.id} value={location.id}>
+                                <div className="flex justify-between items-center w-full">
+                                  <span>{location.location}</span>
+                                  <span className="text-muted-foreground ml-2">
+                                    {location.quantity} {product.unit}
+                                  </span>
+                                </div>
+                              </SelectItem>
+                            ))
+                        : (
+                          <SelectItem value="none" disabled>
+                            Nenhuma localização disponível
+                          </SelectItem>
+                        )}
                     </SelectContent>
                   </Select>
+                  {movementForm.origin && product.stockLocations && (
+                    <div className="text-sm text-muted-foreground mt-1">
+                      Disponível: {(() => {
+                        const originLocation = product.stockLocations.find(
+                          loc => loc.id === movementForm.origin
+                        );
+                        return originLocation?.quantity ?? 0;
+                      })()} {product.unit}
+                    </div>
+                  )}
                 </div>
               )}
-              
               {type !== 'saida' && (
                 <div className="space-y-2">
                   <Label htmlFor="movement-destination">Destino</Label>
@@ -205,18 +240,31 @@ export function StockMovementDialog({
                       <SelectValue placeholder="Selecione o destino" />
                     </SelectTrigger>
                     <SelectContent>
-                      {stockUnits.map((unit) => (
-                        <SelectItem key={unit.id} value={unit.name}>
-                          {unit.name}
+                      {stockUnits.length > 0 ? (
+                        stockUnits
+                          .filter(unit => unit.id && unit.name)
+                          .map(unit => (
+                            <SelectItem key={unit.id} value={unit.id}>
+                              {unit.name}
+                            </SelectItem>
+                          ))
+                      ) : (
+                        <SelectItem value="" disabled>
+                          Nenhuma unidade cadastrada
                         </SelectItem>
-                      ))}
+                      )}
                     </SelectContent>
                   </Select>
+                  {stockUnits.length === 0 && (
+                    <div className="text-sm text-red-600 mt-2">
+                      Cadastre uma unidade de estoque antes de dar entrada.
+                    </div>
+                  )}
                 </div>
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="movement-quantity">Quantidade</Label>
                 <Input
@@ -227,47 +275,55 @@ export function StockMovementDialog({
                 />
               </div>
               {type === 'entrada' && (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="movement-price">Preço</Label>
-                    <Input
-                      id="movement-price"
-                      type="number"
-                      value={movementForm.price}
-                      onChange={(e) => setMovementForm(prev => ({ ...prev, price: Number(e.target.value) }))}
-                      placeholder="0.00"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="movement-expiry">Data de Validade</Label>
-                    <Input
-                      id="movement-expiry"
-                      type="date"
-                      value={movementForm.expiryDate}
-                      onChange={(e) => setMovementForm(prev => ({ ...prev, expiryDate: e.target.value }))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="movement-supplier">Fornecedor</Label>
-                    <Select
-                      value={movementForm.supplierId}
-                      onValueChange={(value) => setMovementForm(prev => ({ ...prev, supplierId: value }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione o fornecedor" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {actualSuppliers.map((supplier) => (
-                          <SelectItem key={supplier.id} value={supplier.id}>
-                            {supplier.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </>
+                <div className="space-y-2">
+                  <Label htmlFor="movement-price">Preço</Label>
+                  <Input
+                    id="movement-price"
+                    type="number"
+                    value={movementForm.price}
+                    onChange={(e) => setMovementForm(prev => ({ ...prev, price: Number(e.target.value) }))}
+                    placeholder="0.00"
+                  />
+                </div>
               )}
             </div>
+
+            {type === 'entrada' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="movement-expiry">Data de Validade</Label>
+                  <Input
+                    id="movement-expiry"
+                    type="date"
+                    value={movementForm.expiryDate}
+                    onChange={(e) => setMovementForm(prev => ({ ...prev, expiryDate: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="movement-supplier">Fornecedor</Label>
+                  <Select
+                    value={movementForm.supplierId}
+                    onValueChange={(value) => setMovementForm(prev => ({ ...prev, supplierId: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o fornecedor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {actualSuppliers.map((supplier) => (
+                        <SelectItem key={supplier.id} value={supplier.id}>
+                          {supplier.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                                      {actualSuppliers.length === 0 && (
+                      <p className="text-sm text-muted-foreground">
+                        Nenhum fornecedor encontrado. Crie fornecedores com tipo "fornecedor" primeiro.
+                      </p>
+                    )}
+                </div>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="movement-reason">Motivo</Label>
@@ -286,7 +342,10 @@ export function StockMovementDialog({
               >
                 Cancelar
               </Button>
-              <Button onClick={handleSubmit}>
+              <Button
+                onClick={handleSubmit}
+                disabled={type === 'entrada' && (!movementForm.destination || stockUnits.length === 0)}
+              >
                 {getButtonText()}
               </Button>
             </div>
