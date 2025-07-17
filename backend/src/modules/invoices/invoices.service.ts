@@ -78,20 +78,19 @@ export class InvoicesService {
       }
       if (type === 'invoice' && payments && payments.length > 0) {
         for (const payment of payments) {
-          if (!payment.paymentMethodId && !payment.paymentMethodName) {
-            throw new BadRequestException('Informe paymentMethodId (UUID) ou paymentMethodName (texto livre) em cada pagamento!');
-          }
+          // Permitir pagamentos avulsos (dinheiro, pix, etc.) sem paymentMethod
+          // Para cartão, preencher paymentMethod, cardBrand e installments
           const invoicePayment = new InvoicePayment();
           invoicePayment.paymentMethodId = payment.paymentMethodId ? String(payment.paymentMethodId) : '';
           invoicePayment.paymentMethodName = payment.paymentMethodName ? String(payment.paymentMethodName) : '';
           invoicePayment.dueDate = payment.dueDate;
           invoicePayment.controlNumber = payment.controlNumber ? String(payment.controlNumber) : '';
           invoicePayment.description = payment.description ? String(payment.description) : '';
-          invoicePayment.installments = Number(payment.installments);
-          invoicePayment.installmentValue = Number(payment.installmentValue).toFixed(2);
-          invoicePayment.totalValue = Number(payment.totalValue).toFixed(2);
+          invoicePayment.installments = payment.installments ? Number(payment.installments) : 1;
+          invoicePayment.installmentValue = payment.installmentValue ? Number(payment.installmentValue).toFixed(2) : '';
+          invoicePayment.totalValue = payment.totalValue ? Number(payment.totalValue).toFixed(2) : '';
+          invoicePayment.cardBrand = payment.cardBrand ? String(payment.cardBrand) : undefined;
           invoicePayment.invoice = invoice;
-          console.log('Criando invoicePayment:', invoicePayment);
           await manager.save(invoicePayment);
         }
       }
@@ -109,6 +108,21 @@ export class InvoicesService {
     return this.invoiceRepository.find({
       where,
       relations: ['patient', 'protocol', 'items', 'items.protocol', 'payments', 'payments.paymentMethod'],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async findByPatient(patientId: string) {
+    return this.invoiceRepository.find({
+      where: { patientId },
+      relations: [
+        'patient',
+        'protocol',
+        'items',
+        'items.protocol',
+        'payments',
+        'payments.paymentMethod',
+      ],
       order: { createdAt: 'DESC' },
     });
   }
@@ -155,15 +169,18 @@ export class InvoicesService {
       await manager.delete(InvoicePayment, { invoice: { id } });
       if (payments.length > 0) {
         for (const payment of payments) {
+          // Permitir pagamentos avulsos (dinheiro, pix, etc.) sem paymentMethod
+          // Para cartão, preencher paymentMethod, cardBrand e installments
           const invoicePayment = new InvoicePayment();
           invoicePayment.paymentMethodId = payment.paymentMethodId ? String(payment.paymentMethodId) : '';
           invoicePayment.paymentMethodName = payment.paymentMethodName ? String(payment.paymentMethodName) : '';
           invoicePayment.dueDate = payment.dueDate;
           invoicePayment.controlNumber = payment.controlNumber ? String(payment.controlNumber) : '';
           invoicePayment.description = payment.description ? String(payment.description) : '';
-          invoicePayment.installments = Number(payment.installments);
-          invoicePayment.installmentValue = Number(payment.installmentValue).toFixed(2);
-          invoicePayment.totalValue = Number(payment.totalValue).toFixed(2);
+          invoicePayment.installments = payment.installments ? Number(payment.installments) : 1;
+          invoicePayment.installmentValue = payment.installmentValue ? Number(payment.installmentValue).toFixed(2) : '';
+          invoicePayment.totalValue = payment.totalValue ? Number(payment.totalValue).toFixed(2) : '';
+          invoicePayment.cardBrand = payment.cardBrand ? String(payment.cardBrand) : undefined;
           invoicePayment.invoice = invoice;
           await manager.save(invoicePayment);
         }
@@ -196,5 +213,48 @@ export class InvoicesService {
       await manager.delete(Invoice, { id });
       return { success: true };
     });
+  }
+
+  async calculateInvoice(data: any) {
+    const { items, discount, discountType, payments } = data;
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      throw new Error('Itens obrigatórios para cálculo');
+    }
+    // Buscar protocolos e validar/preencher preço correto
+    const protocolIds = items.map((item: any) => item.protocolId);
+    const protocols = await this.dataSource.getRepository('Protocol').findByIds(protocolIds);
+    const protocolMap = new Map(protocols.map((p: any) => [p.id, p]));
+    let subtotal = 0;
+    const validatedItems = items.map((item: any) => {
+      const protocol = protocolMap.get(item.protocolId);
+      if (!protocol) throw new Error(`Protocolo não encontrado: ${item.protocolId}`);
+      const price = protocol.price ? Number(protocol.price) : Number(item.price);
+      const quantity = Number(item.quantity);
+      const total = price * quantity;
+      subtotal += total;
+      return { ...item, price, total };
+    });
+    let discountValue = 0;
+    if (discountType === 'percentage') {
+      discountValue = subtotal * (Number(discount) / 100);
+    } else {
+      discountValue = Number(discount);
+    }
+    const total = subtotal - discountValue;
+    let totalReceived = 0;
+    if (payments && Array.isArray(payments)) {
+      totalReceived = payments.reduce((sum: number, p: any) => sum + Number(p.totalValue || 0), 0);
+    }
+    let paymentStatus: 'paid' | 'pending' | 'partial' = 'pending';
+    if (totalReceived >= total) paymentStatus = 'paid';
+    else if (totalReceived > 0) paymentStatus = 'partial';
+    return {
+      subtotal: Number(subtotal.toFixed(2)),
+      discount: Number(discountValue.toFixed(2)),
+      discountType,
+      total: Number(total.toFixed(2)),
+      totalReceived: Number(totalReceived.toFixed(2)),
+      paymentStatus,
+    };
   }
 } 

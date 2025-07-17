@@ -18,7 +18,6 @@ import { AuthGuard } from '@/modules/auth/auth.guard';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
-import { CreateTransactionDto } from './create-transaction.dto';
 
 @Controller('transactions')
 export class TransactionsController {
@@ -43,7 +42,7 @@ export class TransactionsController {
     },
   }))
   async create(
-    @Body() body: CreateTransactionDto,
+    @Body() body: any,
     @UploadedFile() file: any,
     @Req() req: any
   ) {

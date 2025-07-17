@@ -16,7 +16,13 @@ export class InvoicePayment {
 
   @ManyToOne(() => PaymentMethod, { nullable: true })
   @JoinColumn({ name: 'paymentMethodId' })
-  paymentMethod: PaymentMethod;
+  paymentMethod?: PaymentMethod; // Opcional: só preencha para pagamentos em cartão
+
+  /**
+   * Nome da bandeira do cartão (ex: Visa, Master, Elo, etc). Só preencha para pagamentos em cartão.
+   */
+  @Column({ nullable: true })
+  cardBrand?: string;
 
   @Column({ nullable: true })
   paymentMethodName: string;
@@ -31,7 +37,7 @@ export class InvoicePayment {
   description: string;
 
   @Column('int', { default: 1 })
-  installments: number;
+  installments: number; // Número de parcelas. Só preencha para pagamentos parcelados (cartão)
 
   @Column('decimal', { precision: 10, scale: 2 })
   installmentValue: string;
@@ -39,5 +45,7 @@ export class InvoicePayment {
   @Column('decimal', { precision: 10, scale: 2 })
   totalValue: string;
 
-  // ...outros campos
+  // Observação:
+  // - Para pagamentos em dinheiro, pix, etc: NÃO preencha paymentMethod nem cardBrand.
+  // - Para pagamentos em cartão: preencha paymentMethod (maquineta), cardBrand (bandeira) e installments (parcelas).
 } 

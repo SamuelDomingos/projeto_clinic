@@ -43,4 +43,14 @@ export class InvoicesController {
   async convertToInvoice(@Param('id') id: string) {
     return this.invoicesService.convertToInvoice(id);
   }
+
+  @Post('calculate')
+  async calculateInvoice(@Body() body: any) {
+    return this.invoicesService.calculateInvoice(body);
+  }
+
+  @Get('patient/:patientId')
+  async findByPatient(@Param('patientId') patientId: string) {
+    return this.invoicesService.findByPatient(patientId);
+  }
 } 
