@@ -3,6 +3,10 @@ import {
   format,
   addWeeks,
   subWeeks,
+<<<<<<< HEAD
+=======
+  parseISO,
+>>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
   startOfWeek,
   endOfWeek,
   addDays,
@@ -34,6 +38,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
+<<<<<<< HEAD
 import ScheduleGrid from '@/components/ui/ScheduleGrid';
 import { useScheduleConfig } from '@/contexts/ScheduleConfigContext';
 
@@ -60,6 +65,13 @@ function getStartOfWeek(dayIndex: number, weekOffset = 0) {
 export default function Scheduling() {
   const [weekOffset, setWeekOffset] = useState(0);
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
+=======
+
+export default function Scheduling() {
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [editingAppointment, setEditingAppointment] =
+    useState<Appointment | null>(null);
+>>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -67,7 +79,10 @@ export default function Scheduling() {
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [selectedDoctors, setSelectedDoctors] = useState<string[]>([]);
   const { toast } = useToast();
+<<<<<<< HEAD
   const { config, hours } = useScheduleConfig();
+=======
+>>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
 
   const loadHealthProfessionals = useCallback(async () => {
     try {
@@ -102,11 +117,19 @@ export default function Scheduling() {
     try {
       setLoading(true);
       const start = format(
+<<<<<<< HEAD
         startOfWeek(new Date(), { locale: ptBR }),
         "yyyy-MM-dd"
       );
       const end = format(
         endOfWeek(new Date(), { locale: ptBR }),
+=======
+        startOfWeek(currentDate, { locale: ptBR }),
+        "yyyy-MM-dd"
+      );
+      const end = format(
+        endOfWeek(currentDate, { locale: ptBR }),
+>>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
         "yyyy-MM-dd"
       );
       const appointmentsList = await appointmentApi.list({
@@ -125,7 +148,11 @@ export default function Scheduling() {
     } finally {
       setLoading(false);
     }
+<<<<<<< HEAD
   }, [toast]);
+=======
+  }, [currentDate, toast]);
+>>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
 
   useEffect(() => {
     loadHealthProfessionals();
@@ -242,7 +269,13 @@ export default function Scheduling() {
   };
 
   const handleNavigateWeek = (direction: "next" | "prev") => {
+<<<<<<< HEAD
     setWeekOffset(w => w + (direction === "next" ? 1 : -1));
+=======
+    setCurrentDate(
+      direction === "next" ? addWeeks(currentDate, 1) : subWeeks(currentDate, 1)
+    );
+>>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
   };
 
   const getStatusColor = (status: string) => {
@@ -289,6 +322,7 @@ export default function Scheduling() {
     }
   };
 
+<<<<<<< HEAD
   // Calcular os dias da semana baseados no contexto e offset
   const weekDays = config?.workingDays || [
     'Segunda-Feira',
@@ -309,6 +343,16 @@ export default function Scheduling() {
     end.setDate(start.getDate() + weekDays.length - 1);
     return `${format(start, 'd MMM', { locale: ptBR })} - ${format(end, 'd MMM yyyy', { locale: ptBR })}`;
   }
+=======
+  const daysOfWeek = Array.from({ length: 7 }, (_, i) =>
+    addDays(startOfWeek(currentDate, { locale: ptBR }), i)
+  );
+  const timeSlots = Array.from({ length: 24 * 2 }, (_, i) => {
+    const hour = Math.floor(i / 2);
+    const minute = (i % 2) * 30;
+    return format(new Date().setHours(hour, minute, 0, 0), "HH:mm");
+  });
+>>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
 
   const getAppointmentsForSlot = (
     day: Date,
@@ -485,6 +529,7 @@ export default function Scheduling() {
         {/* Calendar Navigation */}
         <div className="flex items-center justify-between p-3 bg-muted/50 border-b border-t">
           <div className="flex items-center space-x-2">
+<<<<<<< HEAD
             <Button variant="ghost" size="sm" onClick={() => setWeekOffset(w => w - 1)}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
@@ -493,18 +538,58 @@ export default function Scheduling() {
               <ChevronRight className="h-4 w-4" />
             </Button>
             <Button variant="outline" size="sm" onClick={() => setWeekOffset(0)}>
+=======
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleNavigateWeek("prev")}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-sm font-medium">
+              {format(startOfWeek(currentDate, { locale: ptBR }), "d MMM", {
+                locale: ptBR,
+              })}{" "}
+              -{" "}
+              {format(endOfWeek(currentDate, { locale: ptBR }), "d MMM yyyy", {
+                locale: ptBR,
+              })}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleNavigateWeek("next")}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentDate(new Date())}
+            >
+>>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
               Hoje
             </Button>
           </div>
           <div className="flex items-center space-x-2">
+<<<<<<< HEAD
             <Button variant="ghost" size="sm" className="font-bold">
               Semana
             </Button>
+=======
+            {/* View Mode Buttons (Dia, Semana, Mês) - can be implemented later */}
+            <Button variant="ghost" size="sm" className="font-bold">
+              Semana
+            </Button>
+            {/* <Button variant="ghost" size="sm">Dia</Button>
+            <Button variant="ghost" size="sm">Mês</Button> */}
+>>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
           </div>
         </div>
 
         {/* Main Scheduling Grid */}
         <div className="flex-1 overflow-auto bg-background">
+<<<<<<< HEAD
           <ScheduleGrid
             weekDays={weekDays}
             hours={hours}
@@ -512,6 +597,162 @@ export default function Scheduling() {
             // Você pode passar renderCell, onCellClick, etc, conforme necessidade
           />
         </div>
+=======
+  <div className="min-w-[900px]">
+    {/* Header com dias da semana */}
+    <div className="grid grid-cols-[100px_repeat(7,1fr)] sticky top-0 z-30 bg-background border-b-2">
+      <div className="bg-muted/50 border-r"></div>
+      {daysOfWeek.map(day => (
+        <div key={day.toISOString()} className="bg-muted/50 border-r p-3 text-center">
+          <div className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+            {format(day, 'EEE', { locale: ptBR })}
+          </div>
+          <div className={cn(
+            "text-lg font-semibold mt-1",
+            isSameDay(day, new Date()) 
+              ? "text-white bg-primary rounded-full w-8 h-8 flex items-center justify-center mx-auto" 
+              : "text-foreground"
+          )}>
+            {format(day, 'd')}
+          </div>
+          <div className="text-xs text-muted-foreground mt-1">
+            {getAppointmentsForDay(day).length} agendamento(s)
+          </div>
+        </div>
+      ))}
+    </div>
+
+    {/* Grid principal com horários e agendamentos */}
+    <div className="grid grid-cols-[100px_repeat(7,1fr)]">
+      
+      {/* Coluna de horários */}
+      <div className="sticky left-0 z-20 bg-background border-r">
+        {Array.from({ length: 12 }, (_, i) => i + 7).map(hour => ( // 7h às 18h
+          <div 
+            key={hour}
+            className="h-20 border-b flex items-start justify-center pt-2"
+          >
+            <div className="text-sm font-medium text-muted-foreground bg-background px-2">
+              {hour.toString().padStart(2, '0')}:00
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Colunas dos dias */}
+      {daysOfWeek.map(day => {
+        const dayAppointments = getAppointmentsForDay(day);
+        
+        return (
+          <div key={day.toISOString()} className="border-r relative">
+            {Array.from({ length: 12 }, (_, i) => i + 7).map(hour => {
+              const timeSlot = `${hour.toString().padStart(2, '0')}:00`;
+              
+              return (
+                <div
+                  key={`${day.toISOString()}-${hour}`}
+                  className={cn(
+                    "h-20 border-b relative group cursor-pointer transition-colors",
+                    "hover:bg-muted/20"
+                  )}
+                  onClick={() => {
+                    // Criar novo agendamento para este horário
+                    if (selectedDoctors.length > 0) {
+                      console.log('Criar agendamento:', { day, hour, doctor: selectedDoctors[0] });
+                      handleNewAppointment();
+                    }
+                  }}
+                >
+                  {/* Indicador de hover */}
+                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                    <div className="flex items-center justify-center h-full">
+                      <div className="bg-primary/10 text-primary rounded-md px-2 py-1 text-xs font-medium">
+                        <Plus className="h-3 w-3 inline mr-1" />
+                        Novo
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Linha de meia hora */}
+                  <div className="absolute inset-x-0 top-10 h-px bg-border/50"></div>
+
+                  {/* Agendamentos */}
+                  {dayAppointments.map(appt => {
+                    const position = getAppointmentPosition(appt, timeSlot);
+                    
+                    if (!position.isInSlot) return null;
+
+                    const doctor = healthProfessionals.find(d => d.id === appt.doctorId);
+                    const offsetPx = (position.offsetMinutes / 60) * 80; // 80px = altura do slot
+                    const heightPx = Math.min((appt.duration / 60) * 80, 80 - offsetPx);
+
+                    return (
+                      <div
+                        key={appt.id}
+                        className={cn(
+                          "absolute left-1 right-1 rounded-lg shadow-sm border cursor-pointer transition-all hover:shadow-md hover:scale-[1.02]",
+                          "p-2 text-xs overflow-hidden z-10",
+                          getStatusColor(appt.status)
+                        )}
+                        style={{
+                          top: `${offsetPx}px`,
+                          height: `${Math.max(heightPx, 36)}px`
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEditAppointment(appt);
+                        }}
+                      >
+                        {/* Header do agendamento */}
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="font-semibold text-xs">
+                            {appt.startTime.substring(0, 5)}
+                          </div>
+                          <div className={cn(
+                            "w-2 h-2 rounded-full",
+                            appt.status === 'confirmed' && "bg-blue-500",
+                            appt.status === 'completed' && "bg-green-500", 
+                            appt.status === 'scheduled' && "bg-yellow-500",
+                            appt.status === 'cancelled' && "bg-red-500"
+                          )}></div>
+                        </div>
+
+                        {/* Conteúdo principal */}
+                        <div className="font-medium truncate text-sm">
+                          {appt.patient?.name || 'Paciente'}
+                        </div>
+                        
+                        <div className="text-xs opacity-80 truncate">
+                          {appt.procedure}
+                        </div>
+
+                        {/* Médico (se múltiplos selecionados) */}
+                        {selectedDoctors.length > 1 && doctor && (
+                          <div className="text-xs opacity-70 truncate mt-1 flex items-center">
+                            <div className="w-3 h-3 rounded-full bg-current/20 mr-1 flex-shrink-0"></div>
+                            Dr. {doctor.name.split(' ')[0]}
+                          </div>
+                        )}
+
+                        {/* Duração */}
+                        {appt.duration > 30 && (
+                          <div className="text-xs opacity-60 mt-1">
+                            {appt.duration}min
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
+  </div>
+</div>
+>>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
 
         {isEditorOpen && editingAppointment && (
           <AppointmentEditor

@@ -41,6 +41,10 @@ const menuItems = [
   { id: "dashboard", path: "/dashboard", label: "Dashboard", icon: Activity },
   { id: "contact", path: "/patients", label: "Contato/CRM", icon: Users },
   { id: "scheduling", path: "/scheduling", label: "Agendamentos", icon: Calendar },
+<<<<<<< HEAD
+=======
+  { id: "invoices", path: "/invoices", label: "Faturas e Orçamentos", icon: Receipt },
+>>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
   { id: "transactions", path: "/transactions", label: "Lançamentos", icon: TrendingUp },
   { id: "inventory", path: "/inventory", label: "Estoque", icon: Package },
   { id: "sessions", path: "/sessions", label: "Sessões e Protocolos", icon: FileText },

@@ -26,7 +26,10 @@ interface TransactionListProps {
   typeFilter: string;
   categoryFilter: string;
   dateFilter: string;
+<<<<<<< HEAD
   bankAccounts: any[];
+=======
+>>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
 }
 
 const getTypeInfo = (transaction: Transaction) => {
@@ -84,13 +87,23 @@ export function TransactionList({
   categoryFilter, 
   dateFilter,
   onEdit,
+<<<<<<< HEAD
   onDelete,
   bankAccounts
+=======
+  onDelete
+>>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
 }: TransactionListProps & { onEdit?: (transaction: Transaction) => void, onDelete?: (transaction: Transaction) => void }) {
   const [openMenuId, setOpenMenuId] = useState<string | number | null>(null);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+<<<<<<< HEAD
   const [editMode, setEditMode] = useState(false); // NOVO: controla se está em modo edição
+=======
+
+  console.log(transactions);
+  
+>>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
 
   const filteredTransactions = useMemo(() => {
 
@@ -200,7 +213,10 @@ export function TransactionList({
                       id: String(transaction.id),
                       updatedAt: transaction.updatedAt || transaction.createdAt
                     }); 
+<<<<<<< HEAD
                     setEditMode(false); // VISUALIZAÇÃO
+=======
+>>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
                     setDetailsOpen(true); 
                   }}
                 >
@@ -246,7 +262,11 @@ export function TransactionList({
                     )}
                   </td>
                   <td className="p-4 text-center">
+<<<<<<< HEAD
                     <button title="Dar baixa" className="text-blue-600 hover:text-blue-800" onClick={e => { e.stopPropagation(); setSelectedTransaction({ ...transaction, id: String(transaction.id), updatedAt: transaction.updatedAt || transaction.createdAt }); setEditMode(true); setDetailsOpen(true); }}>
+=======
+                    <button title="Dar baixa" className="text-blue-600 hover:text-blue-800" onClick={e => { e.stopPropagation(); setSelectedTransaction({ ...transaction, id: String(transaction.id), updatedAt: transaction.updatedAt || transaction.createdAt }); setDetailsOpen(true); }}>
+>>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
                       <SquareCheckBig className="inline w-5 h-5" />
                     </button>
                   </td>
@@ -292,8 +312,11 @@ export function TransactionList({
         open={detailsOpen}
         onOpenChange={setDetailsOpen}
         transaction={selectedTransaction}
+<<<<<<< HEAD
         editMode={editMode} // NOVO: passa o modo de edição
         bankAccounts={bankAccounts}
+=======
+>>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
       />
     </div>
   );

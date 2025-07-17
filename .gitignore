@@ -1,2 +1,6 @@
+<<<<<<< HEAD
 /backend
+=======
+backend/node_modules/
+>>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
 frontend/node_modules/ 

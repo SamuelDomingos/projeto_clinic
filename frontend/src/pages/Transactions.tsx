@@ -15,7 +15,10 @@ import {
 } from "@/lib/api/types/transaction";
 import { transactionService } from "@/lib/api/services/transactionService";
 import { categoryService } from "@/lib/api/services/categoryService";
+<<<<<<< HEAD
 import { supplierApi } from "@/lib/api/services/supplier";
+=======
+>>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -60,6 +63,7 @@ export default function Transactions() {
   const [showOFXImport, setShowOFXImport] = useState(false);
   const [categories, setCategories] = useState<TransactionCategory[]>([]);
   const [categoryMap, setCategoryMap] = useState<Record<string, string>>({});
+<<<<<<< HEAD
   const [bankAccounts, setBankAccounts] = useState([]);
 
   // Buscar contas bancárias (fornecedores com categoria 'conta bancaria')
@@ -75,6 +79,8 @@ export default function Transactions() {
       });
     }
   }, [toast]);
+=======
+>>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
 
   const loadCategories = useCallback(async () => {
     try {
@@ -146,8 +152,12 @@ export default function Transactions() {
 
   useEffect(() => {
     loadCategories();
+<<<<<<< HEAD
     loadBankAccounts();
   }, [loadCategories, loadBankAccounts]);
+=======
+  }, [loadCategories]);
+>>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
 
   useEffect(() => {
     if (categories.length > 0) {
@@ -262,7 +272,10 @@ export default function Transactions() {
             }
             loadTransactions();
           }}
+<<<<<<< HEAD
           bankAccounts={bankAccounts}
+=======
+>>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
         />
       )}
 

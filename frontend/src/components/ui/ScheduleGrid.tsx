@@ -8,6 +8,7 @@ interface ScheduleGridProps {
   renderCell?: (day: string, hour: string) => React.ReactNode;
   getDayLabel?: (day: string) => React.ReactNode;
   getHourLabel?: (hour: string) => React.ReactNode;
+<<<<<<< HEAD
   weekOffset?: number; // nova prop
 }
 
@@ -30,6 +31,8 @@ function getStartOfWeek(dayIndex: number, weekOffset = 0) {
   start.setDate(today.getDate() - diff + weekOffset * 7);
   start.setHours(0, 0, 0, 0);
   return start;
+=======
+>>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
 }
 
 export const ScheduleGrid: React.FC<ScheduleGridProps> = ({
@@ -40,16 +43,21 @@ export const ScheduleGrid: React.FC<ScheduleGridProps> = ({
   renderCell,
   getDayLabel,
   getHourLabel,
+<<<<<<< HEAD
   weekOffset = 0,
 }) => {
   // Descobre o índice do primeiro dia da semana
   const firstDayIndex = dayNameToIndex[weekDays[0]] ?? 1; // padrão: segunda
   const startOfWeek = getStartOfWeek(firstDayIndex, weekOffset);
 
+=======
+}) => {
+>>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
   return (
     <div className="overflow-x-auto rounded border bg-white dark:bg-background">
       <div className="min-w-[900px]">
         {/* Header com dias da semana */}
+<<<<<<< HEAD
         <div
           className="grid sticky top-0 z-30 bg-background border-b-2"
           style={{ gridTemplateColumns: `100px repeat(${weekDays.length}, 1fr)` }}
@@ -75,6 +83,23 @@ export const ScheduleGrid: React.FC<ScheduleGridProps> = ({
           className="grid"
           style={{ gridTemplateColumns: `100px repeat(${weekDays.length}, 1fr)` }}
         >
+=======
+        <div className={`grid grid-cols-[100px_repeat(${weekDays.length},1fr)] sticky top-0 z-30 bg-background border-b-2`}>
+          <div className="bg-muted/50 border-r"></div>
+          {weekDays.map((day, idx) => (
+            <div key={day} className="bg-muted/50 border-r p-3 text-center">
+              <div className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                {getDayLabel ? getDayLabel(day) : day}
+              </div>
+              {/* Placeholder para data/contagem de eventos */}
+              <div className="text-lg font-semibold mt-1 text-foreground">-</div>
+              <div className="text-xs text-muted-foreground mt-1">0 agendamento(s)</div>
+            </div>
+          ))}
+        </div>
+        {/* Grid principal com horários */}
+        <div className={`grid grid-cols-[100px_repeat(${weekDays.length},1fr)]`}>
+>>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
           {/* Coluna de horários */}
           <div className="sticky left-0 z-20 bg-background border-r">
             {hours.map(hour => (
