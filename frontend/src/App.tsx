@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { ScheduleConfigProvider } from "@/contexts/ScheduleConfigContext";
 import Login from "./pages/Login";
 import DashboardLayout from "./layouts/DashboardLayout";
 import Dashboard from "./pages/Dashboard";
@@ -75,7 +76,6 @@ const AppRoutes = () => {
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="patients" element={<ContactCRM />} />
         <Route path="scheduling" element={<Scheduling />} />
-        <Route path="invoices" element={<Invoices />} />
         <Route path="transactions" element={<Transactions />} />
         <Route path="inventory" element={<Inventory />} />
         <Route path="sessions" element={<Sessions />} />
@@ -119,7 +119,9 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <AppRoutes />
+          <ScheduleConfigProvider>
+            <AppRoutes />
+          </ScheduleConfigProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>

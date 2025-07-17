@@ -32,6 +32,9 @@ export interface InvoicePayment {
   paymentMethod?: PaymentMethod;
   createdAt: string;
   updatedAt: string;
+  // Adicionados para suportar seleção de maquineta e bandeira
+  machineId?: string;
+  cardBrand?: string;
 }
 
 export interface Invoice {
@@ -55,6 +58,22 @@ export interface Invoice {
   updatedAt: string;
 }
 
+// Novo tipo para pagamento flexível
+export type InvoicePaymentInput = {
+  paymentMethodName?: string; // Torna opcional para compatibilidade de conversão
+  dueDate: string;
+  installments: number;
+  installmentValue: number | string;
+  totalValue: number | string;
+  // Só para cartão:
+  paymentMethodId?: string;
+  cardBrand?: string;
+  // Extras opcionais
+  controlNumber?: string;
+  description?: string;
+  machineId?: string; // Adicionado para compatibilidade com cartão
+};
+
 export interface CreateInvoiceData {
   type: InvoiceType;
   patientId: string;
@@ -67,15 +86,7 @@ export interface CreateInvoiceData {
   }>;
   discount: number;
   discountType: DiscountType;
-  payments: Array<{
-    paymentMethodId: string;
-    dueDate: string;
-    controlNumber?: string;
-    description?: string;
-    installments: number;
-    installmentValue: number;
-    totalValue: number;
-  }>;
+  payments: InvoicePaymentInput[];
   notes?: string;
 }
 
@@ -90,15 +101,7 @@ export interface UpdateInvoiceData {
   }>;
   discount?: number;
   discountType?: DiscountType;
-  payments?: Array<{
-    paymentMethodId: string;
-    dueDate: string;
-    controlNumber?: string;
-    description?: string;
-    installments: number;
-    installmentValue: number;
-    totalValue: number;
-  }>;
+  payments?: InvoicePaymentInput[];
   notes?: string;
 }
 
@@ -107,4 +110,25 @@ export type InvoiceWithDetails = Invoice & {
   protocol?: Protocol;
   guide?: string;
   number: string;
-}; 
+};
+
+export interface InvoiceCalculationRequest {
+  items: Array<{ protocolId: string; quantity: number; price: number }>;
+  discount: number;
+  discountType: 'fixed' | 'percentage';
+  payments: Array<{
+    paymentMethodId: string;
+    installments: number;
+    installmentValue: number;
+    totalValue: number;
+  }>;
+}
+
+export interface InvoiceCalculationResult {
+  subtotal: number;
+  discount: number;
+  discountType: 'fixed' | 'percentage';
+  total: number;
+  totalReceived: number;
+  paymentStatus: 'paid' | 'pending' | 'partial';
+} 

@@ -15,6 +15,7 @@ import {
 } from "@/lib/api/types/transaction";
 import { transactionService } from "@/lib/api/services/transactionService";
 import { categoryService } from "@/lib/api/services/categoryService";
+import { supplierApi } from "@/lib/api/services/supplier";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -59,6 +60,21 @@ export default function Transactions() {
   const [showOFXImport, setShowOFXImport] = useState(false);
   const [categories, setCategories] = useState<TransactionCategory[]>([]);
   const [categoryMap, setCategoryMap] = useState<Record<string, string>>({});
+  const [bankAccounts, setBankAccounts] = useState([]);
+
+  // Buscar contas bancárias (fornecedores com categoria 'conta bancaria')
+  const loadBankAccounts = useCallback(async () => {
+    try {
+      const accounts = await supplierApi.getSuppliers({ category: 'conta' });
+      setBankAccounts(accounts);
+    } catch (error) {
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível carregar as contas bancárias',
+        variant: 'destructive',
+      });
+    }
+  }, [toast]);
 
   const loadCategories = useCallback(async () => {
     try {
@@ -130,7 +146,8 @@ export default function Transactions() {
 
   useEffect(() => {
     loadCategories();
-  }, [loadCategories]);
+    loadBankAccounts();
+  }, [loadCategories, loadBankAccounts]);
 
   useEffect(() => {
     if (categories.length > 0) {
@@ -245,6 +262,7 @@ export default function Transactions() {
             }
             loadTransactions();
           }}
+          bankAccounts={bankAccounts}
         />
       )}
 

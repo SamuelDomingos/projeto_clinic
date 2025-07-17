@@ -27,6 +27,11 @@ const Supplier = sequelize.define('Supplier', {
     type: DataTypes.STRING,
     allowNull: true
   },
+  type: {
+    type: DataTypes.ENUM('fornecedor', 'unidade'),
+    allowNull: true,
+    defaultValue: 'fornecedor'
+  },
   cnpj: {
     type: DataTypes.STRING,
   },

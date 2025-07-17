@@ -26,6 +26,7 @@ interface TransactionListProps {
   typeFilter: string;
   categoryFilter: string;
   dateFilter: string;
+  bankAccounts: any[];
 }
 
 const getTypeInfo = (transaction: Transaction) => {
@@ -83,14 +84,13 @@ export function TransactionList({
   categoryFilter, 
   dateFilter,
   onEdit,
-  onDelete
+  onDelete,
+  bankAccounts
 }: TransactionListProps & { onEdit?: (transaction: Transaction) => void, onDelete?: (transaction: Transaction) => void }) {
   const [openMenuId, setOpenMenuId] = useState<string | number | null>(null);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
-
-  console.log(transactions);
-  
+  const [editMode, setEditMode] = useState(false); // NOVO: controla se está em modo edição
 
   const filteredTransactions = useMemo(() => {
 
@@ -200,6 +200,7 @@ export function TransactionList({
                       id: String(transaction.id),
                       updatedAt: transaction.updatedAt || transaction.createdAt
                     }); 
+                    setEditMode(false); // VISUALIZAÇÃO
                     setDetailsOpen(true); 
                   }}
                 >
@@ -245,7 +246,7 @@ export function TransactionList({
                     )}
                   </td>
                   <td className="p-4 text-center">
-                    <button title="Dar baixa" className="text-blue-600 hover:text-blue-800" onClick={e => { e.stopPropagation(); setSelectedTransaction({ ...transaction, id: String(transaction.id), updatedAt: transaction.updatedAt || transaction.createdAt }); setDetailsOpen(true); }}>
+                    <button title="Dar baixa" className="text-blue-600 hover:text-blue-800" onClick={e => { e.stopPropagation(); setSelectedTransaction({ ...transaction, id: String(transaction.id), updatedAt: transaction.updatedAt || transaction.createdAt }); setEditMode(true); setDetailsOpen(true); }}>
                       <SquareCheckBig className="inline w-5 h-5" />
                     </button>
                   </td>
@@ -291,6 +292,8 @@ export function TransactionList({
         open={detailsOpen}
         onOpenChange={setDetailsOpen}
         transaction={selectedTransaction}
+        editMode={editMode} // NOVO: passa o modo de edição
+        bankAccounts={bankAccounts}
       />
     </div>
   );

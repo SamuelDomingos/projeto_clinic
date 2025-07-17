@@ -1,5 +1,6 @@
 import api, { isAxiosError, ApiError } from '../config';
 import { Invoice, CreateInvoiceData, UpdateInvoiceData } from '../types';
+import { InvoiceCalculationRequest, InvoiceCalculationResult } from '../types/invoice';
 
 export const invoiceApi = {
   list: async (params?: {
@@ -80,5 +81,29 @@ export const invoiceApi = {
       }
       throw new Error('Erro ao converter orçamento em fatura');
     }
+  },
+
+  getByPatient: async (patientId: string): Promise<Invoice[]> => {
+    try {
+      const response = await api.get<Invoice[]>(`/invoices/patient/${patientId}`);
+      return response.data;
+    } catch (error) {
+      if (isAxiosError(error) && error.response) {
+        throw new Error((error.response.data as ApiError).error);
+      }
+      throw new Error('Erro ao buscar faturas do paciente');
+    }
   }
-}; 
+};
+
+export async function calculateInvoice(data: InvoiceCalculationRequest): Promise<InvoiceCalculationResult> {
+  try {
+    const response = await api.post<InvoiceCalculationResult>('/invoices/calculate', data);
+    return response.data;
+  } catch (error) {
+    if (isAxiosError(error) && error.response) {
+      throw new Error((error.response.data as ApiError).error);
+    }
+    throw new Error('Erro ao calcular fatura');
+  }
+} 

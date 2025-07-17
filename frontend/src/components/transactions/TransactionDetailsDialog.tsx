@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { DialogDescription } from "@/components/ui/dialog";
 import { formatCurrency } from "@/lib/utils";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -8,11 +9,14 @@ import { Transaction } from "@/lib/api/types/transaction";
 import { Input } from "@/components/ui/input";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { transactionService } from "@/lib/api/services/transactionService";
+import { CheckCircle2, SplitSquareHorizontal } from "lucide-react";
 
 interface TransactionDetailsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   transaction: Transaction | null;
+  editMode?: boolean; // NOVO: modo de edição
+  bankAccounts: Array<{ id: string; name: string }>;
 }
 
 // Exemplo de discriminação do lote (para entradas)
@@ -35,7 +39,7 @@ const exampleLoteItems = [
   },
 ];
 
-export const TransactionDetailsDialog: React.FC<TransactionDetailsDialogProps> = ({ open, onOpenChange, transaction }) => {
+export const TransactionDetailsDialog: React.FC<TransactionDetailsDialogProps> = ({ open, onOpenChange, transaction, editMode = false, bankAccounts }) => {
   // Estados para os campos editáveis
   const [valorPago, setValorPago] = useState('');
   const [pagoEm, setPagoEm] = useState('');
@@ -61,7 +65,7 @@ export const TransactionDetailsDialog: React.FC<TransactionDetailsDialogProps> =
     setLoading(true);
     setError(null);
     try {
-      let payload: any = {};
+      let payload: Record<string, unknown> = {};
       if (isSaida) {
         payload = {
           payableAmount: valorPago,
@@ -79,12 +83,16 @@ export const TransactionDetailsDialog: React.FC<TransactionDetailsDialogProps> =
           status: 'completed',
         };
       }
-      await transactionService.update(transaction.id, payload);
+      await transactionService.update(transaction.id, payload); // Não converter para número, pode ser UUID
       onOpenChange(false);
       // Opcional: recarregar lista, se função passada via prop
       if (typeof window !== 'undefined') window.location.reload();
-    } catch (e: any) {
-      setError(e?.message || 'Erro ao dar baixa');
+    } catch (e: unknown) {
+      if (e instanceof Error) {
+        setError(e.message);
+      } else {
+        setError('Erro ao dar baixa');
+      }
     } finally {
       setLoading(false);
     }
@@ -92,7 +100,9 @@ export const TransactionDetailsDialog: React.FC<TransactionDetailsDialogProps> =
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[80vw] max-w-[80vw] min-w-[300px] max-h-[95vh] overflow-y-auto p-0 bg-white dark:bg-gray-900">
+      <DialogContent className="w-[90vw] max-w-[90vw] min-w-[300px] max-h-[95vh] overflow-x-auto box-border p-0 bg-white dark:bg-gray-900">
+        <DialogTitle>Detalhes da Transação</DialogTitle>
+        <DialogDescription>Veja os detalhes da transação financeira selecionada.</DialogDescription>
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between border-b px-4 md:px-8 pt-4 md:pt-6 pb-4 dark:border-gray-800">
           <div className="flex items-center gap-2 text-lg font-bold">
@@ -207,7 +217,7 @@ export const TransactionDetailsDialog: React.FC<TransactionDetailsDialogProps> =
         )}
 
         {/* Seção Dados da Baixa para saídas */}
-        {isSaida && (
+        {isSaida && editMode && (
           <div className="bg-blue-50 dark:bg-gray-800/60 rounded-b-lg px-4 md:px-8 py-4 md:py-6 mt-0">
             <div className="font-semibold text-gray-700 dark:text-gray-200 mb-4">DADOS DA BAIXA</div>
             <div className="grid grid-cols-1 md:grid-cols-5 gap-x-8 gap-y-4">
@@ -236,9 +246,9 @@ export const TransactionDetailsDialog: React.FC<TransactionDetailsDialogProps> =
                 <Select value={pagoVia} onValueChange={setPagoVia}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="santander">SANTANDER AG MKT</SelectItem>
-                    <SelectItem value="itau">ITAÚ</SelectItem>
-                    <SelectItem value="bradesco">BRADESCO</SelectItem>
+                    {bankAccounts.map((acc) => (
+                      <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -250,7 +260,7 @@ export const TransactionDetailsDialog: React.FC<TransactionDetailsDialogProps> =
           </div>
         )}
         {/* Seção Dados da Baixa para entradas */}
-        {isEntrada && (
+        {isEntrada && editMode && (
           <div className="bg-blue-50 dark:bg-gray-800/60 rounded-b-lg px-4 md:px-8 py-4 md:py-6 mt-0">
             <div className="font-semibold text-gray-700 dark:text-gray-200 mb-4">DADOS DA BAIXA</div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-x-8 gap-y-4">
@@ -274,9 +284,9 @@ export const TransactionDetailsDialog: React.FC<TransactionDetailsDialogProps> =
                 <Select value={recebidoVia} onValueChange={setRecebidoVia}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="santander">SANTANDER - MEDCA</SelectItem>
-                    <SelectItem value="itau">ITAÚ</SelectItem>
-                    <SelectItem value="bradesco">BRADESCO</SelectItem>
+                    {bankAccounts.map((acc) => (
+                      <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -285,11 +295,33 @@ export const TransactionDetailsDialog: React.FC<TransactionDetailsDialogProps> =
         )}
         {/* Footer */}
         <div className="flex justify-end gap-2 px-4 md:px-8 py-4 border-t dark:border-gray-800">
-          <button className="px-4 py-2 rounded bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600" onClick={() => onOpenChange(false)} disabled={loading}>
+          <button
+            className="px-4 py-2 rounded bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600"
+            onClick={() => onOpenChange(false)}
+            disabled={loading}
+          >
             Cancelar
           </button>
-          {isSaida && <button className="px-4 py-2 rounded bg-cyan-600 text-white hover:bg-cyan-700" onClick={() => handleBaixa('parcial')} disabled={loading}>Baixa parcial</button>}
-          <button className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700" onClick={() => handleBaixa('total')} disabled={loading}>{loading ? 'Salvando...' : 'Baixa total'}</button>
+          {isSaida && editMode && (
+            <button
+              className="px-4 py-2 rounded flex items-center gap-2 bg-yellow-500 hover:bg-yellow-600 text-white font-semibold shadow-sm transition-colors"
+              onClick={() => handleBaixa('parcial')}
+              disabled={loading}
+              title="Baixar parcialmente esta despesa"
+            >
+              <SplitSquareHorizontal className="w-5 h-5" /> Baixa parcial
+            </button>
+          )}
+          {editMode && (
+            <button
+              className="px-4 py-2 rounded flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-sm transition-colors"
+              onClick={() => handleBaixa('total')}
+              disabled={loading}
+              title="Dar baixa total nesta transação"
+            >
+              <CheckCircle2 className="w-5 h-5" /> {loading ? 'Salvando...' : 'Baixa total'}
+            </button>
+          )}
         </div>
         {error && <div className="text-red-600 text-sm px-8 pb-2">{error}</div>}
       </DialogContent>
