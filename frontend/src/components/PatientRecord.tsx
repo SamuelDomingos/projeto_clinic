@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,10 +14,10 @@ import { Button } from "@/components/ui/button";
 import { PatientHeader } from "./patient-record/PatientHeader";
 import { PersonalData } from "./patient-record/PersonalData";
 import { MedicalRecord } from "./patient-record/MedicalRecord";
-import { PatientBilling } from "./patient-record/PatientBilling";
-import AppointmentEditor from "./AppointmentEditor";
-import { appointmentApi, type Appointment, type Patient  } from "@/lib/api";
+import AppointmentEditor from "./AppointmentEditor/AppointmentEditor";
+import { appointmentApi, type Appointment, type Patient, invoiceApi, type Invoice } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
+import { PatientInvoices } from "./patient-record/PatientInvoices";
 
 interface PatientRecordProps {
   patient: Patient;
@@ -25,20 +25,13 @@ interface PatientRecordProps {
 
 export function PatientRecord({ patient }: PatientRecordProps) {
   const [activeTab, setActiveTab] = useState("record");
-  const [records, setRecords] = useState<any[]>([]);
+  const [records, setRecords] = useState<unknown[]>([]); // Substitua por um tipo mais específico se souber
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAppointmentEditorOpen, setIsAppointmentEditorOpen] = useState(false);
   const { toast } = useToast();
 
-  useEffect(() => {
-    if (patient?.id) {
-      loadPatientRecords();
-      loadAppointments();
-    }
-  }, [patient?.id]);
-
-  const loadPatientRecords = async () => {
+  const loadPatientRecords = useCallback(async () => {
     try {
       setLoading(true);
       // Implementar carregamento dos registros médicos
@@ -51,13 +44,13 @@ export function PatientRecord({ patient }: PatientRecordProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
 
-  const loadAppointments = async () => {
+  const loadAppointments = useCallback(async () => {
     try {
       setLoading(true);
       const response = await appointmentApi.list({ patientId: patient.id });
-      setAppointments(response.data || []);
+      setAppointments(response || []);
     } catch (error) {
       toast({
         title: "Erro",
@@ -68,7 +61,14 @@ export function PatientRecord({ patient }: PatientRecordProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [appointmentApi, patient.id, toast]);
+
+  useEffect(() => {
+    if (patient?.id) {
+      loadPatientRecords();
+      loadAppointments();
+    }
+  }, [patient?.id, loadPatientRecords, loadAppointments]);
 
   const handleAppointmentSave = async (appointment: Appointment) => {
     try {
@@ -249,27 +249,9 @@ export function PatientRecord({ patient }: PatientRecordProps) {
 
         {/* Aba de Contas/Orçamentos */}
         <TabsContent value="billing">
-          <PatientBilling patient={patient} />
+          <PatientInvoices patientId={patient.id} />
         </TabsContent>
       </Tabs>
-
-      <AppointmentEditor
-        appointment={null}
-        isOpen={isAppointmentEditorOpen}
-        onClose={() => setIsAppointmentEditorOpen(false)}
-        onSave={handleAppointmentSave}
-        doctors={[]} // TODO: Implementar lista de doutores
-        allUsers={[]} // TODO: Implementar lista de usuários
-        initialPatient={{
-          id: patient.id,
-          name: patient.name,
-          email: patient.email,
-          phone: patient.phone,
-          birthDate: patient.birthDate,
-          cpf: patient.cpf,
-          rg: patient.rg
-        }}
-      />
     </div>
   );
 }

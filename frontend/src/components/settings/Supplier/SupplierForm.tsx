@@ -103,6 +103,7 @@ const SupplierForm = ({ supplier, onSave, onCancel }: SupplierFormProps) => {
                     <SelectItem value="estoque">Estoque</SelectItem>
                     <SelectItem value="unidade">Unidade</SelectItem>
                     <SelectItem value="conta">Conta Bancária</SelectItem>
+                    <SelectItem value="centerOfCustody">Centro de Custo</SelectItem>
                     <SelectItem value="outros">Outros</SelectItem>
                   </>
                 )}

@@ -1,14 +1,24 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar, Clock, Plus, CalendarDays, ChevronLeft, ChevronRight, Edit, Eye, MoreVertical } from "lucide-react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "react-beautiful-dnd";
-import { AppointmentEditor } from "./AppointmentEditor";
+import AppointmentEditor from "./AppointmentEditor/AppointmentEditor";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import type { Appointment as GlobalAppointment } from '@/lib/api/types/appointment';
+import type { User } from '@/lib/api/types/common';
+import { userApi } from "../lib/api";
+import { attendanceScheduleApi } from "../lib/api/services/attendanceSchedule";
+import type { AttendanceSchedule } from "@/lib/api/types/attendanceSchedule";
 
-interface Appointment {
+// Status válidos para o tipo global
+const VALID_STATUSES = ["scheduled", "confirmed", "completed", "cancelled"] as const;
+type ValidStatus = typeof VALID_STATUSES[number];
+
+// Tipo explícito para o mock de agendamento
+interface AppointmentMock {
   id: string;
   time: string;
   duration: number;
@@ -19,74 +29,110 @@ interface Appointment {
   notes?: string;
 }
 
+// Função para garantir contraste do texto
+function getContrastYIQ(hexcolor: string) {
+  hexcolor = hexcolor.replace('#', '');
+  if (hexcolor.length !== 6) return '#222';
+  const r = parseInt(hexcolor.substr(0,2),16);
+  const g = parseInt(hexcolor.substr(2,2),16);
+  const b = parseInt(hexcolor.substr(4,2),16);
+  const yiq = ((r*299)+(g*587)+(b*114))/1000;
+  return yiq >= 128 ? '#222' : '#fff';
+}
+// Função para gerar cor de fundo translúcida baseada na cor escolhida
+function getPreviewBg(hex: string, dark = false) {
+  if (!hex) return dark ? '#16232b' : '#f3fbfd';
+  const h = hex.replace('#', '');
+  const r = parseInt(h.substring(0,2), 16);
+  const g = parseInt(h.substring(2,4), 16);
+  const b = parseInt(h.substring(4,6), 16);
+  return dark
+    ? `rgba(${r},${g},${b},0.18)`
+    : `rgba(${r},${g},${b},0.12)`;
+}
+
+// Adaptador para converter o mock para o tipo global
+function adaptAppointment(appointment: AppointmentMock, doctor: User): GlobalAppointment {
+  // Força o status para um valor válido
+  const status: ValidStatus = VALID_STATUSES.includes(appointment.status as ValidStatus)
+    ? (appointment.status as ValidStatus)
+    : "scheduled";
+  return {
+    id: appointment.id,
+    patientId: appointment.patient, // Aqui você pode mapear para um id real se tiver
+    doctorId: doctor.id,
+    startTime: appointment.time,
+    createdAt: '',
+    updatedAt: '',
+    date: appointment.date,
+    duration: appointment.duration,
+    procedure: appointment.procedure,
+    status,
+    notes: appointment.notes,
+  };
+}
+
+// Tipo extendido para agendamento com campos extras opcionais
+
+type AttendanceScheduleWithExtras = AttendanceSchedule & {
+  procedure?: string;
+  duration?: number;
+  status?: string;
+};
+
 export function Scheduling() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState("week");
-  const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
+  const [editingAppointment, setEditingAppointment] = useState<GlobalAppointment | null>(null);
   const [editingDoctor, setEditingDoctor] = useState("");
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [doctors, setDoctors] = useState<User[]>([]);
+  const [appointments, setAppointments] = useState<Record<string, Record<string, AttendanceScheduleWithExtras>>>({});
+  const [loading, setLoading] = useState(false);
 
-  // Dados mockados para agendamentos organizados por horário e médico
-  const [appointments, setAppointments] = useState({
-    "Dr. João Silva": {
-      "09:00": {
-        id: "1",
-        time: "09:00",
-        duration: 60,
-        patient: "Maria Silva",
-        procedure: "Consulta Dermatológica",
-        status: "confirmed",
-        date: "2024-06-05",
-        notes: "Paciente com histórico de alergias"
-      },
-      "10:30": {
-        id: "2",
-        time: "10:30",
-        duration: 45,
-        patient: "João Santos",
-        procedure: "Aplicação Botox",
-        status: "completed",
-        date: "2024-06-05"
-      }
-    },
-    "Dra. Ana Costa": {
-      "14:00": {
-        id: "3",
-        time: "14:00",
-        duration: 30,
-        patient: "Ana Costa",
-        procedure: "Limpeza de Pele",
-        status: "pending",
-        date: "2024-06-05"
-      }
-    },
-    "Dra. Maria Santos": {
-      "15:30": {
-        id: "4",
-        time: "15:30",
-        duration: 60,
-        patient: "Carlos Oliveira",
-        procedure: "Consulta Geral",
-        status: "confirmed",
-        date: "2024-06-06"
-      }
-    }
-  });
-
-  const doctors = [
-    { id: 1, name: "Dr. João Silva", specialty: "Dermatologia", color: "bg-blue-100 dark:bg-blue-900/20" },
-    { id: 2, name: "Dra. Ana Costa", specialty: "Estética", color: "bg-green-100 dark:bg-green-900/20" },
-    { id: 3, name: "Dra. Maria Santos", specialty: "Clínica Geral", color: "bg-purple-100 dark:bg-purple-900/20" }
+  // Defina os horários conforme o padrão da empresa
+  const timeSlots = [
+    "08:00", "09:00", "10:00", "11:00", "12:00",
+    "13:00", "14:00", "15:00", "16:00", "17:00"
   ];
 
-  // Horários de 8:00 às 18:00 com intervalos de 30 min
-  const timeSlots = [];
-  for (let hour = 8; hour <= 18; hour++) {
-    timeSlots.push(`${hour.toString().padStart(2, '0')}:00`);
-    if (hour < 18) {
-      timeSlots.push(`${hour.toString().padStart(2, '0')}:30`);
-    }
+  // Busca profissionais de saúde
+  useEffect(() => {
+    userApi.list({ role: "health_professional" }).then(setDoctors);
+  }, []);
+
+  // Função para obter o início e fim da semana
+  function getWeekRange(date: Date) {
+    const start = new Date(date);
+    start.setDate(date.getDate() - date.getDay());
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    return {
+      startDate: start.toISOString().slice(0, 10),
+      endDate: end.toISOString().slice(0, 10),
+    };
   }
+
+  // Busca agendamentos da API
+  useEffect(() => {
+    if (doctors.length === 0) return;
+    setLoading(true);
+    const { startDate, endDate } = getWeekRange(currentDate);
+    attendanceScheduleApi.list({ startDate, endDate })
+      .then(data => {
+        // Organiza por médico e horário
+        const grouped: Record<string, Record<string, AttendanceScheduleWithExtras>> = {};
+        data.forEach(item => {
+          if (!grouped[item.userId]) grouped[item.userId] = {};
+          grouped[item.userId][item.startTime] = item as AttendanceScheduleWithExtras;
+        });
+        setAppointments(grouped);
+      })
+      .finally(() => setLoading(false));
+  }, [currentDate, doctors]);
+
+  console.log('doctors:', doctors);
+  console.log('appointments:', appointments);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -116,7 +162,19 @@ export function Scheduling() {
   const handleEditAppointment = (doctor: string, time: string) => {
     const appointment = appointments[doctor]?.[time];
     if (appointment) {
-      setEditingAppointment(appointment);
+      setEditingAppointment({
+        id: appointment.id,
+        patientId: appointment.patientId,
+        doctorId: appointment.userId,
+        startTime: appointment.startTime,
+        createdAt: appointment.createdAt,
+        updatedAt: appointment.updatedAt,
+        date: appointment.date,
+        duration: appointment.duration ?? 0,
+        procedure: appointment.procedure ?? '',
+        status: (VALID_STATUSES.includes(appointment.status as ValidStatus) ? appointment.status : 'scheduled') as ValidStatus,
+        notes: appointment.observation ?? '',
+      });
       setEditingDoctor(doctor);
       setIsEditorOpen(true);
     }
@@ -128,16 +186,34 @@ export function Scheduling() {
     setIsEditorOpen(true);
   };
 
-  const handleSaveAppointment = (appointment: Appointment) => {
+  const handleSaveAppointment = async (appointment: GlobalAppointment) => {
     setAppointments(prev => {
       const newAppointments = { ...prev };
-      
-      if (!newAppointments[editingDoctor]) {
-        newAppointments[editingDoctor] = {};
+      const doctor = doctors.find(d => d.id === appointment.doctorId);
+      if (!doctor) return prev;
+      if (!newAppointments[doctor.id]) {
+        newAppointments[doctor.id] = {};
       }
-      
-      newAppointments[editingDoctor][appointment.time] = appointment;
-      
+      newAppointments[doctor.id][appointment.startTime] = {
+        id: appointment.id,
+        patientId: appointment.patientId,
+        userId: appointment.doctorId,
+        unitId: '',
+        date: appointment.date,
+        startTime: appointment.startTime,
+        endTime: '',
+        attendanceType: 'avulso',
+        value: null,
+        isBlocked: false,
+        createdAt: '',
+        updatedAt: '',
+        patient: typeof appointment.patientId === 'string' ? { id: '', name: appointment.patientId } : undefined,
+        user: { id: appointment.doctorId, name: doctor.name },
+        observation: appointment.notes,
+        duration: appointment.duration,
+        procedure: appointment.procedure,
+        status: appointment.status,
+      };
       return newAppointments;
     });
   };
@@ -168,7 +244,7 @@ export function Scheduling() {
       
       newAppointments[destDoctor][destTime] = {
         ...appointment,
-        time: destTime
+        startTime: destTime
       };
       
       return newAppointments;
@@ -275,10 +351,10 @@ export function Scheduling() {
                       {doctors.map((doctor) => (
                         <div 
                           key={doctor.id} 
-                          className={`${doctor.color} p-1.5 text-center border border-border rounded`}
+                          className={`${doctor.status === 'active' ? 'bg-green-100 dark:bg-green-900/20' : 'bg-muted'} p-1.5 text-center border border-border rounded`}
                         >
                           <p className="font-medium text-xs text-foreground truncate">{doctor.name}</p>
-                          <p className="text-[10px] text-muted-foreground truncate">{doctor.specialty}</p>
+                          <p className="text-[10px] text-muted-foreground truncate">{doctor.role}</p>
                         </div>
                       ))}
                     </div>
@@ -294,7 +370,7 @@ export function Scheduling() {
                           
                           {/* Colunas dos médicos */}
                           {doctors.map((doctor) => (
-                            <Droppable key={`${doctor.name}-${timeSlot}`} droppableId={`${doctor.name}-${timeSlot}`}>
+                            <Droppable key={`${doctor.id}-${timeSlot}`} droppableId={`${doctor.id}-${timeSlot}`}>
                               {(provided, snapshot) => (
                                 <div
                                   ref={provided.innerRef}
@@ -304,59 +380,48 @@ export function Scheduling() {
                                       ? 'border-primary bg-primary/10' 
                                       : 'border-border bg-background hover:bg-muted/50'
                                   }`}
-                                  onDoubleClick={() => handleNewAppointment(doctor.name, timeSlot)}
+                                  onDoubleClick={() => handleNewAppointment(doctor.id, timeSlot)}
                                 >
-                                  {appointments[doctor.name]?.[timeSlot] ? (
+                                  {appointments[doctor.id]?.[timeSlot] ? (
                                     <Draggable 
-                                      draggableId={appointments[doctor.name][timeSlot].id} 
+                                      draggableId={appointments[doctor.id][timeSlot].id} 
                                       index={0}
                                     >
-                                      {(provided, snapshot) => (
-                                        <div
-                                          ref={provided.innerRef}
-                                          {...provided.draggableProps}
-                                          {...provided.dragHandleProps}
-                                          className={`p-1.5 rounded border cursor-move transition-shadow ${
-                                            snapshot.isDragging ? 'shadow-lg' : 'shadow-sm'
-                                          } ${getStatusColor(appointments[doctor.name][timeSlot].status)}`}
-                                        >
-                                          <div className="space-y-0.5">
-                                            <div className="flex justify-between items-start">
-                                              <p className="font-medium text-xs truncate max-w-[120px]">
-                                                {appointments[doctor.name][timeSlot].patient}
-                                              </p>
-                                              <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                  <Button variant="ghost" size="sm" className="h-4 w-4 p-0">
-                                                    <MoreVertical className="h-3 w-3" />
-                                                  </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent className="bg-background border-border">
-                                                  <DropdownMenuItem onClick={() => handleEditAppointment(doctor.name, timeSlot)}>
-                                                    <Edit className="h-3 w-3 mr-2" />
-                                                    Editar
-                                                  </DropdownMenuItem>
-                                                  <DropdownMenuItem>
-                                                    <Eye className="h-3 w-3 mr-2" />
-                                                    Visualizar
-                                                  </DropdownMenuItem>
-                                                </DropdownMenuContent>
-                                              </DropdownMenu>
-                                            </div>
-                                            <p className="text-[10px] text-muted-foreground truncate">
-                                              {appointments[doctor.name][timeSlot].procedure}
-                                            </p>
-                                            <div className="flex items-center justify-between">
-                                              <span className="text-[10px] font-medium">
-                                                {appointments[doctor.name][timeSlot].duration}min
-                                              </span>
-                                              <Badge className={`${getStatusColor(appointments[doctor.name][timeSlot].status)} text-[10px] px-1 py-0`} variant="outline">
-                                                {getStatusLabel(appointments[doctor.name][timeSlot].status)}
-                                              </Badge>
+                                      {(provided, snapshot) => {
+                                        const color = doctor.status === 'active' ? 'bg-green-100 dark:bg-green-900/20' : 'bg-muted';
+                                        const appt = appointments[doctor.id][timeSlot];
+                                        return (
+                                          <div
+                                            ref={provided.innerRef}
+                                            {...provided.draggableProps}
+                                            {...provided.dragHandleProps}
+                                            className="p-0 rounded border cursor-move transition-shadow bg-transparent"
+                                          >
+                                            <div
+                                              className="rounded-lg px-2 py-1 flex items-center gap-2"
+                                              style={{
+                                                background: getPreviewBg(color, false),
+                                                border: `1.5px solid ${color}`,
+                                                minHeight: 40,
+                                                transition: 'background 0.2s, border 0.2s',
+                                              }}
+                                            >
+                                              <span
+                                                className="inline-block w-3 h-3 rounded-full"
+                                                style={{ background: color }}
+                                              />
+                                              <div>
+                                                <div className="text-xs font-semibold" style={{ color: getContrastYIQ(color) }}>
+                                                  {appt.procedure ?? ''}
+                                                </div>
+                                                <div className="text-[11px] opacity-70" style={{ color: getContrastYIQ(color) }}>
+                                                  {appt.startTime} - {typeof appt.patient === 'object' ? appt.patient.name : appt.patientId}
+                                                </div>
+                                              </div>
                                             </div>
                                           </div>
-                                        </div>
-                                      )}
+                                        );
+                                      }}
                                     </Draggable>
                                   ) : (
                                     <div className="flex items-center justify-center h-full text-muted-foreground text-[10px]">
@@ -401,7 +466,7 @@ export function Scheduling() {
                     </tr>
                   </thead>
                   <tbody>
-                    {Object.entries(appointments).map(([doctor, timeSlots]) =>
+                    {Object.entries(appointments).map(([doctorId, timeSlots]) =>
                       Object.entries(timeSlots).map(([time, appointment]) => (
                         <tr key={appointment.id} className="border-b border-border hover:bg-muted/50">
                           <td className="p-4">
@@ -409,23 +474,23 @@ export function Scheduling() {
                               <p className="font-medium text-foreground">
                                 {new Date(appointment.date).toLocaleDateString('pt-BR')}
                               </p>
-                              <p className="text-sm text-muted-foreground">{appointment.time}</p>
+                              <p className="text-sm text-muted-foreground">{appointment.startTime}</p>
                             </div>
                           </td>
-                          <td className="p-4 font-medium text-foreground">{appointment.patient}</td>
-                          <td className="p-4 text-muted-foreground">{doctor}</td>
-                          <td className="p-4 text-muted-foreground">{appointment.procedure}</td>
-                          <td className="p-4 text-muted-foreground">{appointment.duration}min</td>
+                          <td className="p-4 font-medium text-foreground">{typeof appointment.patient === 'object' ? appointment.patient.name : appointment.patientId}</td>
+                          <td className="p-4 text-muted-foreground">{doctors.find(d => d.id === doctorId)?.name}</td>
+                          <td className="p-4 text-muted-foreground">{appointment.procedure ?? ''}</td>
+                          <td className="p-4 text-muted-foreground">{appointment.duration ?? ''}min</td>
                           <td className="p-4">
-                            <Badge className={getStatusColor(appointment.status)} variant="outline">
-                              {getStatusLabel(appointment.status)}
+                            <Badge className={getStatusColor(appointment.status ?? '')} variant="outline">
+                              {getStatusLabel(appointment.status ?? '')}
                             </Badge>
                           </td>
                           <td className="p-4 space-x-2">
                             <Button 
                               variant="outline" 
                               size="sm"
-                              onClick={() => handleEditAppointment(doctor, time)}
+                              onClick={() => handleEditAppointment(doctorId, time)}
                               className="bg-orange-50 hover:bg-orange-100 text-orange-600 border-orange-200 dark:bg-orange-900/20 dark:hover:bg-orange-900/30 dark:text-orange-400 dark:border-orange-800"
                             >
                               <Edit className="h-4 w-4" />
@@ -451,10 +516,12 @@ export function Scheduling() {
 
       <AppointmentEditor
         appointment={editingAppointment}
-        doctor={editingDoctor}
         isOpen={isEditorOpen}
         onClose={() => setIsEditorOpen(false)}
         onSave={handleSaveAppointment}
+        doctors={doctors}
+        allUsers={doctors}
+        patientId={typeof editingAppointment?.patientId === 'string' ? editingAppointment?.patientId : ''}
       />
     </div>
   );
