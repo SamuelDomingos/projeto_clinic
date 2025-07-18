@@ -4,16 +4,11 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
-<<<<<<< HEAD
-import { ScheduleConfigProvider } from "@/contexts/ScheduleConfigContext";
-=======
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
 import Login from "./pages/Login";
 import DashboardLayout from "./layouts/DashboardLayout";
 import Dashboard from "./pages/Dashboard";
 import ContactCRM from "./pages/ContactCRM";
 import Scheduling from "./pages/Scheduling";
-import Invoices from "./pages/Invoices";
 import Transactions from "./pages/Transactions";
 import Inventory from "./pages/Inventory";
 import Sessions from "./pages/Sessions";
@@ -38,6 +33,7 @@ import CategoryForm from "./pages/Health/Category/CategoryForm";
 import QuestionForm from "./pages/Health/Question/QuestionForm";
 import Schedule from "./pages/settings/Schedule";
 import ExecutorConfig from './pages/settings/ExecutorConfig';
+import { ScheduleConfigProvider } from "./contexts/ScheduleConfigContext";
 // import Management from "./pages/Management/Management"; // Quando o arquivo existir
 
 const queryClient = new QueryClient();
@@ -79,10 +75,6 @@ const AppRoutes = () => {
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="patients" element={<ContactCRM />} />
         <Route path="scheduling" element={<Scheduling />} />
-<<<<<<< HEAD
-=======
-        <Route path="invoices" element={<Invoices />} />
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
         <Route path="transactions" element={<Transactions />} />
         <Route path="inventory" element={<Inventory />} />
         <Route path="sessions" element={<Sessions />} />
@@ -126,13 +118,9 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-<<<<<<< HEAD
           <ScheduleConfigProvider>
             <AppRoutes />
           </ScheduleConfigProvider>
-=======
-          <AppRoutes />
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>

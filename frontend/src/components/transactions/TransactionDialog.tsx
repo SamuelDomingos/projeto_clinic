@@ -2,7 +2,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-<<<<<<< HEAD
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectLabel, SelectGroup } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Transaction, TransactionType, TransactionStatus, PaymentMethod } from "@/lib/api/types/transaction";
@@ -15,16 +14,6 @@ import { supplierApi } from "@/lib/api/services/supplier";
 import { patientApi } from "@/lib/api/services/patient";
 import { userApi } from "@/lib/api/services/user";
 import { Checkbox } from "@/components/ui/checkbox";
-=======
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { Transaction, TransactionType, TransactionStatus, PaymentMethod } from "@/lib/api/types/transaction";
-import { formatCurrency } from "@/lib/utils";
-import { useState, useEffect } from "react";
-import { Switch } from "@/components/ui/switch";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { api } from "@/lib/api";
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
 
 type RecurrenceType = 'none' | 'recurring' | 'installment';
 type RecurrenceMode = 'indeterminate' | 'quantity';
@@ -41,11 +30,7 @@ interface TransactionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   transaction?: Transaction;
-<<<<<<< HEAD
   onSubmit: (transaction: Partial<Transaction> & { costCenter?: string }) => void;
-=======
-  onSubmit: (transaction: Partial<Transaction>) => void;
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
   categories: { id: string; name: string; type: TransactionType }[];
 }
 
@@ -72,20 +57,16 @@ export function TransactionDialog({
   const [recurrenceQuantity, setRecurrenceQuantity] = useState(12);
   const [installments, setInstallments] = useState(1);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-<<<<<<< HEAD
   const [costCenters, setCostCenters] = useState<Supplier[]>([]);
   const [costCenter, setCostCenter] = useState("");
   const [boletoFile, setBoletoFile] = useState<File | null>(null);
   const [patients, setPatients] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [competence, setCompetence] = useState("");
-=======
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
 
   useEffect(() => {
     const fetchSuppliers = async () => {
       try {
-<<<<<<< HEAD
         const response = await api.get<Supplier[]>("/suppliers");
         const unitSuppliers = response.data.filter(
           (supplier) =>
@@ -100,16 +81,6 @@ export function TransactionDialog({
         setCostCenters(costCenterSuppliers);
       } catch (error) {
         console.error("Erro ao carregar fornecedores:", error);
-=======
-        const response = await api.get<Supplier[]>('/suppliers');
-        const unitSuppliers = response.data.filter(supplier => 
-          (supplier.type === 'unidade' || supplier.category === 'unidade') && 
-          supplier.status === 'active'
-        );
-        setSuppliers(unitSuppliers);
-      } catch (error) {
-        console.error('Erro ao carregar fornecedores:', error);
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
       }
     };
 
@@ -118,7 +89,6 @@ export function TransactionDialog({
     }
   }, [open]);
 
-<<<<<<< HEAD
   // Buscar pacientes e usuários quando for receita
   useEffect(() => {
     if (open && formData.type === "revenue") {
@@ -127,15 +97,12 @@ export function TransactionDialog({
     }
   }, [open, formData.type]);
 
-=======
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
   useEffect(() => {
     if (transaction) {
       setFormData({
         ...transaction,
         branch: transaction.branch || "",
       });
-<<<<<<< HEAD
       setCostCenter((transaction as { costCenter?: string }).costCenter || "");
       // Inicializa competência com o mês/ano do dueDate da transação
       if (transaction.dueDate) {
@@ -143,9 +110,6 @@ export function TransactionDialog({
       } else {
         setCompetence("");
       }
-=======
-
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
       // Detectar se é recorrente ou parcelada
       if (transaction.reference) {
         if (transaction.installments && transaction.installments > 1) {
@@ -169,12 +133,9 @@ export function TransactionDialog({
         notes: "",
         branch: "",
       });
-<<<<<<< HEAD
       setCostCenter("");
       // Inicializa competência com o mês/ano do dueDate padrão
       setCompetence(`${String(new Date().getMonth() + 1).padStart(2, '0')}/${new Date().getFullYear()}`);
-=======
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
       setRecurrenceType('none');
       setInstallments(1);
     }
@@ -216,10 +177,6 @@ export function TransactionDialog({
       
       // Enviar cada transação individualmente
       transactions.forEach(transaction => {
-<<<<<<< HEAD
-=======
-        console.log('Criando transação com data:', transaction.dueDate);
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
         onSubmit(transaction);
       });
       
@@ -245,10 +202,6 @@ export function TransactionDialog({
           installmentNumber: i + 1,
         };
         
-<<<<<<< HEAD
-=======
-        console.log('Criando parcela com data:', transaction.dueDate);
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
         transactions.push(transaction);
       }
       
@@ -257,21 +210,13 @@ export function TransactionDialog({
       // Fechar o diálogo após criar todas as parcelas
       onOpenChange(false);
     } else {
-<<<<<<< HEAD
       onSubmit({ ...formData, costCenter, competence });
-=======
-      onSubmit(formData);
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
       onOpenChange(false);
     }
   };
 
   const handleChange = (
-<<<<<<< HEAD
     field: keyof Transaction | 'costCenter',
-=======
-    field: keyof Transaction,
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
     value: string | number | TransactionType | TransactionStatus | PaymentMethod
   ) => {
     setFormData((prev) => ({
@@ -282,7 +227,6 @@ export function TransactionDialog({
 
   const filteredCategories = categories.filter((cat) => cat.type === formData.type);
 
-<<<<<<< HEAD
   const meses = [
     { value: "01", label: "Janeiro" },
     { value: "02", label: "Fevereiro" },
@@ -310,16 +254,10 @@ export function TransactionDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[80vw] max-w-[80vw] min-w-[300px] max-h-[90vh] overflow-y-auto overflow-x-auto box-border">
-=======
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px]">
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
         <DialogHeader>
           <DialogTitle>{transaction ? "Editar Transação" : "Nova Transação"}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
-<<<<<<< HEAD
           <div className="space-y-2">
             <Label htmlFor="type">Tipo</Label>
             <Select
@@ -427,70 +365,19 @@ export function TransactionDialog({
                     ))}
                   </SelectContent>
                 </Select>
-=======
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="type">Tipo</Label>
-              <Select
-                value={formData.type}
-                onValueChange={(value: TransactionType) => handleChange("type", value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o tipo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="revenue">Receita</SelectItem>
-                  <SelectItem value="expense">Despesa</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="amount">Valor</Label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">R$</span>
-                <Input
-                  id="amount"
-                  type="number"
-                  step="0.01"
-                  value={formData.amount}
-                  onChange={(e) => handleChange("amount", parseFloat(e.target.value))}
-                  required
-                  className="pl-8"
-                />
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
               </div>
             </div>
           </div>
 
-<<<<<<< HEAD
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-=======
-          <div className="space-y-2">
-            <Label htmlFor="description">Descrição</Label>
-            <Input
-              id="description"
-              value={formData.description}
-              onChange={(e) => handleChange("description", e.target.value)}
-              required
-            />
-          </div>
-
-          <div className="grid grid-cols-3 gap-4">
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
             <div className="space-y-2">
               <Label htmlFor="category">Categoria</Label>
               <Select
                 value={formData.category}
                 onValueChange={(value) => handleChange("category", value)}
               >
-<<<<<<< HEAD
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Selecione" />
-=======
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione a categoria" />
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
                 </SelectTrigger>
                 <SelectContent>
                   {filteredCategories.map((category) => (
@@ -501,25 +388,14 @@ export function TransactionDialog({
                 </SelectContent>
               </Select>
             </div>
-<<<<<<< HEAD
             <div className="space-y-2">
               <Label htmlFor="unit">Unidade</Label>
-=======
-
-            <div className="space-y-2">
-              <Label htmlFor="branch">Filial/Unidade</Label>
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
               <Select
                 value={formData.branch}
                 onValueChange={(value) => handleChange("branch", value)}
               >
-<<<<<<< HEAD
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Selecione" />
-=======
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione a filial" />
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
                 </SelectTrigger>
                 <SelectContent>
                   {suppliers.map((supplier) => (
@@ -530,7 +406,6 @@ export function TransactionDialog({
                 </SelectContent>
               </Select>
             </div>
-<<<<<<< HEAD
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -560,22 +435,10 @@ export function TransactionDialog({
                 onChange={(e) => handleChange("description", e.target.value)}
                 required
                 className="w-full"
-=======
-
-            <div className="space-y-2">
-              <Label htmlFor="dueDate">Data de Vencimento</Label>
-              <Input
-                id="dueDate"
-                type="date"
-                value={formData.dueDate}
-                onChange={(e) => handleChange("dueDate", e.target.value)}
-                required
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
               />
             </div>
           </div>
 
-<<<<<<< HEAD
           <div className="space-y-2">
             <Label htmlFor="boletoNumber">Código do Boleto</Label>
             <Input
@@ -626,125 +489,6 @@ export function TransactionDialog({
               Cancelar
             </Button>
             <Button type="submit">Adicionar</Button>
-=======
-          <div className="grid grid-cols-2 gap-4 border rounded-lg p-4 bg-muted/50">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Recorrente</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Repetir mensalmente
-                  </p>
-                </div>
-                <Switch
-                  checked={recurrenceType === 'recurring'}
-                  onCheckedChange={(checked) => {
-                    setRecurrenceType(checked ? 'recurring' : 'none');
-                    if (checked) {
-                      handleChange("type", "expense");
-                    }
-                  }}
-                />
-              </div>
-
-              {recurrenceType === 'recurring' && (
-                <div className="mt-4 space-y-4">
-                  <div className="space-y-2">
-                    <Label className="text-sm">Tipo de Recorrência</Label>
-                    <RadioGroup
-                      value={recurrenceMode}
-                      onValueChange={(value: RecurrenceMode) => setRecurrenceMode(value)}
-                      className="flex gap-4"
-                    >
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="indeterminate" id="indeterminate" />
-                        <Label htmlFor="indeterminate" className="text-sm">Indeterminado (12 meses)</Label>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="quantity" id="quantity" />
-                        <Label htmlFor="quantity" className="text-sm">Quantidade</Label>
-                      </div>
-                    </RadioGroup>
-                  </div>
-
-                  {recurrenceMode === 'quantity' && (
-                    <div className="space-y-2">
-                      <Label htmlFor="recurrenceQuantity" className="text-sm">Quantidade de Meses</Label>
-                      <Input
-                        id="recurrenceQuantity"
-                        type="number"
-                        min="1"
-                        max="60"
-                        value={recurrenceQuantity}
-                        onChange={(e) => setRecurrenceQuantity(parseInt(e.target.value))}
-                        required
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Parcelado</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Dividir em parcelas
-                  </p>
-                </div>
-                <Switch
-                  checked={recurrenceType === 'installment'}
-                  onCheckedChange={(checked) => {
-                    setRecurrenceType(checked ? 'installment' : 'none');
-                    if (checked) {
-                      handleChange("type", "expense");
-                    }
-                    if (!checked) setInstallments(1);
-                  }}
-                />
-              </div>
-
-              {recurrenceType === 'installment' && (
-                <div className="mt-4">
-                  <Label htmlFor="installments" className="text-sm">Número de Parcelas</Label>
-                  <div className="flex gap-2 items-center">
-                    <Input
-                      id="installments"
-                      type="number"
-                      min="2"
-                      max="48"
-                      value={installments}
-                      onChange={(e) => setInstallments(parseInt(e.target.value))}
-                      required
-                      className="w-24"
-                    />
-                    {installments > 1 && (
-                      <div className="text-sm text-muted-foreground">
-                        {formatCurrency((formData.amount || 0) / installments)} / parcela
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="notes">Observações</Label>
-            <Input
-              id="notes"
-              value={formData.notes}
-              onChange={(e) => handleChange("notes", e.target.value)}
-            />
-          </div>
-
-          <div className="flex justify-end space-x-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancelar
-            </Button>
-            <Button type="submit">Salvar</Button>
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
           </div>
         </form>
       </DialogContent>

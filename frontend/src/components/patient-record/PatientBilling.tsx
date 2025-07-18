@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 import { useState, useEffect } from "react";
-=======
-import { useState } from "react";
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -27,7 +23,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-<<<<<<< HEAD
 import axios from "axios";
 import type { Patient, Invoice } from "@/lib/api";
 import { invoiceApi } from "@/lib/api/services/invoice";
@@ -37,9 +32,6 @@ import { Dialog, DialogContent, DialogOverlay } from "@/components/ui/dialog";
 import { protocolApi } from "@/lib/api/services/protocol";
 import { Protocol } from "@/lib/api/types/protocol";
 import { InvoiceWithDetails } from "@/lib/api/types/invoice";
-=======
-import type { Patient } from "@/lib/api";
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
 
 interface PatientBillingProps {
   patient: Patient;
@@ -50,7 +42,6 @@ export function PatientBilling({ patient }: PatientBillingProps) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
 
-<<<<<<< HEAD
   const [patientInvoices, setPatientInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,63 +70,6 @@ export function PatientBilling({ patient }: PatientBillingProps) {
   useEffect(() => {
     loadPatientInvoices();
   }, [patient.id]);
-=======
-  // Dados mockados de faturas/orçamentos específicos do paciente
-  const patientInvoices = [
-    {
-      id: 1,
-      number: "ORÇ-001",
-      type: "budget",
-      guide: "GUIA-001",
-      date: "2024-06-01",
-      receiptNumber: "",
-      invoiceNumber: "",
-      performedBy: "Dr. João Silva",
-      items: [
-        { id: 1, procedure: "Botox", quantity: 1, price: 800, total: 800 },
-        { id: 2, procedure: "Limpeza de Pele", quantity: 1, price: 150, total: 150 }
-      ],
-      subtotal: 950,
-      discount: 50,
-      total: 900,
-      status: "pending"
-    },
-    {
-      id: 2,
-      number: "FAT-001",
-      type: "invoice",
-      guide: "GUIA-002",
-      date: "2024-05-25",
-      receiptNumber: "REC-001",
-      invoiceNumber: "NF-001",
-      performedBy: "Dr. Ana Costa",
-      items: [
-        { id: 1, procedure: "Consulta Dermatológica", quantity: 1, price: 200, total: 200 }
-      ],
-      subtotal: 200,
-      discount: 0,
-      total: 200,
-      status: "paid"
-    },
-    {
-      id: 3,
-      number: "ORÇ-002",
-      type: "budget",
-      guide: "GUIA-003",
-      date: "2024-06-15",
-      receiptNumber: "",
-      invoiceNumber: "",
-      performedBy: "Dr. João Silva",
-      items: [
-        { id: 1, procedure: "Preenchimento", quantity: 1, price: 600, total: 600 }
-      ],
-      subtotal: 600,
-      discount: 0,
-      total: 600,
-      status: "approved"
-    }
-  ];
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -163,7 +97,6 @@ export function PatientBilling({ patient }: PatientBillingProps) {
     return type === 'budget' ? 'Orçamento' : 'Fatura';
   };
 
-<<<<<<< HEAD
   const filteredInvoices = Array.isArray(patientInvoices) ? patientInvoices.filter(invoice => {
     const matchesSearch = (invoice.number?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
                          (typeof invoice['guide'] === 'string' ? invoice['guide'].toLowerCase() : '').includes(searchTerm.toLowerCase());
@@ -194,25 +127,6 @@ export function PatientBilling({ patient }: PatientBillingProps) {
   };
 
   const handleDeleteInvoice = (invoiceId: string) => {
-=======
-  const filteredInvoices = patientInvoices.filter(invoice => {
-    const matchesSearch = invoice.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         invoice.guide.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === "all" || invoice.status === statusFilter;
-    const matchesType = typeFilter === "all" || invoice.type === typeFilter;
-    return matchesSearch && matchesStatus && matchesType;
-  });
-
-  const handleViewDetails = (invoiceId: number) => {
-    console.log(`Visualizar detalhes da fatura ${invoiceId} do paciente ${patient.name}`);
-  };
-
-  const handleEditInvoice = (invoiceId: number) => {
-    console.log(`Editar fatura ${invoiceId} do paciente ${patient.name}`);
-  };
-
-  const handleDeleteInvoice = (invoiceId: number) => {
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
     console.log(`Excluir fatura ${invoiceId} do paciente ${patient.name}`);
   };
 
@@ -221,7 +135,6 @@ export function PatientBilling({ patient }: PatientBillingProps) {
   const paidValue = filteredInvoices.filter(inv => inv.status === 'paid').reduce((sum, invoice) => sum + invoice.total, 0);
   const pendingValue = filteredInvoices.filter(inv => inv.status === 'pending').reduce((sum, invoice) => sum + invoice.total, 0);
 
-<<<<<<< HEAD
   if (loading) {
     return <div className="p-4 text-center">Carregando faturas/orçamentos...</div>;
   }
@@ -229,8 +142,6 @@ export function PatientBilling({ patient }: PatientBillingProps) {
     return <div className="p-4 text-center text-red-600">{error}</div>;
   }
 
-=======
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
   return (
     <div className="space-y-6">
       {/* Resumo Financeiro */}
@@ -342,14 +253,9 @@ export function PatientBilling({ patient }: PatientBillingProps) {
           <div className="space-y-4">
             {filteredInvoices.map((invoice) => (
               <div
-<<<<<<< HEAD
                 key={String(invoice.id)}
                 className="flex items-center justify-between p-4 bg-muted/50 rounded-lg cursor-pointer hover:bg-muted"
                 onClick={() => openInvoiceDetails(String(invoice.id))}
-=======
-                key={invoice.id}
-                className="flex items-center justify-between p-4 bg-muted/50 rounded-lg"
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
               >
                 <div className="flex items-center space-x-4">
                   <div className={`p-2 rounded-full ${invoice.type === 'budget' ? 'bg-blue-100' : 'bg-green-100'}`}>
@@ -374,33 +280,11 @@ export function PatientBilling({ patient }: PatientBillingProps) {
                       </span>
                     </div>
                   </div>
-<<<<<<< HEAD
                   <div className="flex items-center space-x-2" onClick={e => e.stopPropagation()}>
                     <Button
                       variant="ghost"
                       size="icon"
                       onClick={() => handleDeleteInvoice(String(invoice.id))}
-=======
-                  <div className="flex items-center space-x-2">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleViewDetails(invoice.id)}
-                    >
-                      <Eye className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleEditInvoice(invoice.id)}
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDeleteInvoice(invoice.id)}
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -411,7 +295,6 @@ export function PatientBilling({ patient }: PatientBillingProps) {
           </div>
         </CardContent>
       </Card>
-<<<<<<< HEAD
       {/* Modal de detalhes da fatura */}
       <Dialog open={!!selectedInvoiceId} onOpenChange={() => { setSelectedInvoiceId(null); setSelectedInvoice(null); }}>
         <DialogOverlay />
@@ -445,8 +328,6 @@ export function PatientBilling({ patient }: PatientBillingProps) {
           )}
         </DialogContent>
       </Dialog>
-=======
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
     </div>
   );
 }

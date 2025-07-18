@@ -1,9 +1,6 @@
 import api, { isAxiosError, ApiError } from '../config';
 import { Invoice, CreateInvoiceData, UpdateInvoiceData } from '../types';
-<<<<<<< HEAD
 import { InvoiceCalculationRequest, InvoiceCalculationResult } from '../types/invoice';
-=======
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
 
 export const invoiceApi = {
   list: async (params?: {
@@ -84,7 +81,6 @@ export const invoiceApi = {
       }
       throw new Error('Erro ao converter orçamento em fatura');
     }
-<<<<<<< HEAD
   },
 
   getByPatient: async (patientId: string): Promise<Invoice[]> => {
@@ -111,7 +107,3 @@ export async function calculateInvoice(data: InvoiceCalculationRequest): Promise
     throw new Error('Erro ao calcular fatura');
   }
 } 
-=======
-  }
-}; 
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b

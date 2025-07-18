@@ -32,12 +32,9 @@ export interface InvoicePayment {
   paymentMethod?: PaymentMethod;
   createdAt: string;
   updatedAt: string;
-<<<<<<< HEAD
   // Adicionados para suportar seleção de maquineta e bandeira
   machineId?: string;
   cardBrand?: string;
-=======
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
 }
 
 export interface Invoice {
@@ -61,7 +58,6 @@ export interface Invoice {
   updatedAt: string;
 }
 
-<<<<<<< HEAD
 // Novo tipo para pagamento flexível
 export type InvoicePaymentInput = {
   paymentMethodName?: string; // Torna opcional para compatibilidade de conversão
@@ -78,8 +74,6 @@ export type InvoicePaymentInput = {
   machineId?: string; // Adicionado para compatibilidade com cartão
 };
 
-=======
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
 export interface CreateInvoiceData {
   type: InvoiceType;
   patientId: string;
@@ -92,19 +86,7 @@ export interface CreateInvoiceData {
   }>;
   discount: number;
   discountType: DiscountType;
-<<<<<<< HEAD
   payments: InvoicePaymentInput[];
-=======
-  payments: Array<{
-    paymentMethodId: string;
-    dueDate: string;
-    controlNumber?: string;
-    description?: string;
-    installments: number;
-    installmentValue: number;
-    totalValue: number;
-  }>;
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
   notes?: string;
 }
 
@@ -119,19 +101,7 @@ export interface UpdateInvoiceData {
   }>;
   discount?: number;
   discountType?: DiscountType;
-<<<<<<< HEAD
   payments?: InvoicePaymentInput[];
-=======
-  payments?: Array<{
-    paymentMethodId: string;
-    dueDate: string;
-    controlNumber?: string;
-    description?: string;
-    installments: number;
-    installmentValue: number;
-    totalValue: number;
-  }>;
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
   notes?: string;
 }
 
@@ -140,7 +110,6 @@ export type InvoiceWithDetails = Invoice & {
   protocol?: Protocol;
   guide?: string;
   number: string;
-<<<<<<< HEAD
 };
 
 export interface InvoiceCalculationRequest {
@@ -163,6 +132,3 @@ export interface InvoiceCalculationResult {
   totalReceived: number;
   paymentStatus: 'paid' | 'pending' | 'partial';
 } 
-=======
-}; 
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b

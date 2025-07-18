@@ -53,14 +53,7 @@ export function OFXImportDialog({
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-<<<<<<< HEAD
   
-=======
-
-  console.log(suppliers);
-  
-
->>>>>>> 4ae4ac2d3c5f475691a2ea8fcc0e5ebbeb5f8d3b
   useEffect(() => {
     const fetchData = async () => {
       try {
