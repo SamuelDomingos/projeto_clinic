@@ -22,41 +22,43 @@ export class PatientProtocolsService {
 
   async create(data: any) {
     return this.dataSource.transaction(async manager => {
+      console.log('Iniciando criação do PatientProtocol com dados:', data);
       // Cria o PatientProtocol normalmente
       const patientProtocol = manager.create(PatientProtocol, data);
       const savedPatientProtocol = await manager.save(patientProtocol);
+      console.log('PatientProtocol salvo:', savedPatientProtocol);
       // Busca os serviços do protocolo
       const protocol = await manager.findOne(Protocol, {
         where: { id: savedPatientProtocol.protocolId },
         relations: ['protocolServices'],
       });
-      console.log('protocol.protocolServices:', protocol?.protocolServices);
-      if (protocol && protocol.protocolServices && protocol.protocolServices.length > 0) {
-        for (const protocolService of protocol.protocolServices) {
-          for (let i = 1; i <= protocolService.numberOfSessions; i++) {
-            const exists = await manager.getRepository(PatientServiceSession).findOne({
-              where: {
-                patientProtocolId: savedPatientProtocol.id,
-                protocolServiceId: protocolService.id,
-                sessionNumber: i,
-              },
-            });
-            if (!exists) {
-              await manager.getRepository(PatientServiceSession).save({
-                patientProtocolId: savedPatientProtocol.id,
-                protocolServiceId: protocolService.id,
-                sessionNumber: i,
-                status: 'scheduled',
-              });
-              console.log('Sessão criada:', { patientProtocolId: savedPatientProtocol.id, protocolServiceId: protocolService.id, sessionNumber: i });
-            } else {
-              console.log('Sessão já existe:', { patientProtocolId: savedPatientProtocol.id, protocolServiceId: protocolService.id, sessionNumber: i });
-            }
-          }
-        }
-      } else {
-        console.log('Protocolo ou serviços não encontrados ao criar PatientProtocol!');
+      console.log('Protocol encontrado:', protocol);
+      if (!protocol || !protocol.protocolServices || protocol.protocolServices.length === 0) {
+        console.log('Protocolo não possui serviços associados. Não é possível criar sessões.');
+        throw new NotFoundException('Protocolo não possui serviços associados. Não é possível criar sessões.');
       }
+      for (const protocolService of protocol.protocolServices) {
+        // Cria apenas uma sessão por serviço, indicando o total de sessões
+        const exists = await manager.getRepository(PatientServiceSession).findOne({
+          where: {
+            patientProtocolId: savedPatientProtocol.id,
+            protocolServiceId: protocolService.id,
+          },
+        });
+        if (!exists) {
+          const session = await manager.getRepository(PatientServiceSession).save({
+            patientProtocolId: savedPatientProtocol.id,
+            protocolServiceId: protocolService.id,
+            sessionNumber: 1,
+            totalSessions: protocolService.numberOfSessions,
+            status: 'scheduled',
+          });
+          console.log('Sessão criada:', session);
+        } else {
+          console.log('Sessão já existe:', exists);
+        }
+      }
+      console.log('Finalizando criação do PatientProtocol:', savedPatientProtocol.id);
       return savedPatientProtocol;
     });
   }

@@ -42,6 +42,10 @@ export class InvoicesService {
     if (!data) {
       throw new BadRequestException('Dados do body não enviados!');
     }
+    const { items } = data;
+    if (!Array.isArray(items) || items.length === 0) {
+      throw new BadRequestException('O campo items deve ser um array com pelo menos um item.');
+    }
     return this.dataSource.transaction(async (manager) => {
       const {
         type,
@@ -78,6 +82,16 @@ export class InvoicesService {
       });
       console.log('Criando invoice:', invoice);
       await manager.save(invoice);
+      // Criação automática do PatientProtocol se for orçamento (budget)
+      if (type === 'budget') {
+        const patientProtocol = await this.patientProtocolsService.create({
+          patientId: String(patientId),
+          protocolId: String(protocolId),
+          purchaseDate: new Date(),
+          status: 'active'
+        });
+        console.log('PatientProtocol criado automaticamente a partir do orçamento:', patientProtocol.id);
+      }
       for (const item of items as any[]) {
         if (
           !item.protocolId ||

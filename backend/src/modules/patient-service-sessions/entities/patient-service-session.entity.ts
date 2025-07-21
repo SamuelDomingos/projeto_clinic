@@ -30,6 +30,9 @@ export class PatientServiceSession {
   @Column()
   sessionNumber: number;
 
+  @Column()
+  totalSessions: number;
+
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   sessionDate: Date;
 
