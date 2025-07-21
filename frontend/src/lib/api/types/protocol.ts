@@ -86,6 +86,7 @@ export interface PatientServiceSession {
   id: string;
   patientProtocolId: string;
   protocolServiceId: string;
+  sessionNumber: number;
   sessionDate: string;
   observations?: string;
   nextAllowedDate?: string;

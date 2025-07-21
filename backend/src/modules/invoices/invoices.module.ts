@@ -6,9 +6,13 @@ import { InvoicesService } from './invoices.service';
 import { InvoicesController } from './invoices.controller';
 import { InvoiceItem } from './entities/invoice-item.entity';
 import { InvoicePayment } from './entities/invoice-payment.entity';
+import { PatientProtocolsModule } from '../patient-protocols/patient-protocols.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Invoice, InvoiceItem, InvoicePayment, Patient])],
+  imports: [
+    TypeOrmModule.forFeature([Invoice, InvoiceItem, InvoicePayment, Patient]),
+    PatientProtocolsModule,
+  ],
   controllers: [InvoicesController],
   providers: [InvoicesService],
   exports: [InvoicesService],

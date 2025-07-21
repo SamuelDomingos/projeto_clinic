@@ -1,4 +1,10 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  JoinColumn,
+} from 'typeorm';
 import { Invoice } from './invoice.entity';
 import { PaymentMethod } from '../../payment-methods/entities/payment-method.entity';
 
@@ -7,12 +13,12 @@ export class InvoicePayment {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @ManyToOne(() => Invoice, invoice => invoice.payments)
+  @ManyToOne(() => Invoice, (invoice) => invoice.payments)
   @JoinColumn({ name: 'invoiceId' })
   invoice: Invoice;
 
   @Column({ nullable: true })
-  paymentMethodId: string;
+  paymentMethodId: string | null;
 
   @ManyToOne(() => PaymentMethod, { nullable: true })
   @JoinColumn({ name: 'paymentMethodId' })

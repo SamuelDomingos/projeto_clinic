@@ -1,12 +1,15 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, ILike } from 'typeorm';
 import { Invoice } from './entities/invoice.entity';
 import { InvoiceItem } from './entities/invoice-item.entity';
 import { InvoicePayment } from './entities/invoice-payment.entity';
-import { Patient } from '../patients/entities/patient.entity';
-import { Protocol } from '../protocols/entities/protocol.entity';
-import { PaymentMethod } from '../payment-methods/entities/payment-method.entity';
+
+import { PatientProtocolsService } from '../patient-protocols/patient-protocols.service';
 
 @Injectable()
 export class InvoicesService {
@@ -18,6 +21,7 @@ export class InvoicesService {
     @InjectRepository(InvoicePayment)
     private readonly invoicePaymentRepository: Repository<InvoicePayment>,
     private readonly dataSource: DataSource,
+    private readonly patientProtocolsService: PatientProtocolsService,
   ) {}
 
   async generateInvoiceNumber(type: string): Promise<string> {
@@ -38,11 +42,25 @@ export class InvoicesService {
     if (!data) {
       throw new BadRequestException('Dados do body não enviados!');
     }
-    return this.dataSource.transaction(async manager => {
-      const { type, patientId, protocolId, performedBy, notes, items, payments, discount, discountType } = data;
+    return this.dataSource.transaction(async (manager) => {
+      const {
+        type,
+        patientId,
+        protocolId,
+        performedBy,
+        notes,
+        items,
+        payments,
+        discount,
+        discountType,
+      } = data;
       const number = await this.generateInvoiceNumber(type);
-      const subtotal = items.reduce((sum, item) => sum + (Number(item.price) * Number(item.quantity)), 0);
-      const discountValue = discountType === 'percentage' ? (subtotal * discount / 100) : discount;
+      const subtotal = (items as any[]).reduce(
+        (sum, item) => sum + Number(item.price) * Number(item.quantity),
+        0,
+      );
+      const discountValue =
+        discountType === 'percentage' ? (subtotal * discount) / 100 : discount;
       const total = subtotal - discountValue;
       const invoice = manager.create(Invoice, {
         number: String(number),
@@ -60,9 +78,15 @@ export class InvoicesService {
       });
       console.log('Criando invoice:', invoice);
       await manager.save(invoice);
-      for (const item of items) {
-        if (!item.protocolId || typeof item.protocolId !== 'string' || item.protocolId.trim() === '') {
-          throw new BadRequestException('protocolId é obrigatório e deve ser um UUID válido em cada item!');
+      for (const item of items as any[]) {
+        if (
+          !item.protocolId ||
+          typeof item.protocolId !== 'string' ||
+          item.protocolId.trim() === ''
+        ) {
+          throw new BadRequestException(
+            'protocolId é obrigatório e deve ser um UUID válido em cada item!',
+          );
         }
         const invoiceItem = manager.create(InvoiceItem, {
           invoiceId: invoice.id,
@@ -73,23 +97,35 @@ export class InvoicesService {
         });
         console.log('Criando invoiceItem:', invoiceItem);
         await manager.save(invoiceItem);
-        const savedItem = await manager.findOne(InvoiceItem, { where: { id: invoiceItem.id } });
+        const savedItem = await manager.findOne(InvoiceItem, {
+          where: { id: invoiceItem.id },
+        });
         console.log('Salvo no banco invoiceItem:', savedItem);
       }
       if (type === 'invoice' && payments && payments.length > 0) {
-        for (const payment of payments) {
-          // Permitir pagamentos avulsos (dinheiro, pix, etc.) sem paymentMethod
-          // Para cartão, preencher paymentMethod, cardBrand e installments
+        for (const payment of payments as any[]) {
           const invoicePayment = new InvoicePayment();
-          invoicePayment.paymentMethodId = payment.paymentMethodId ? String(payment.paymentMethodId) : '';
-          invoicePayment.paymentMethodName = payment.paymentMethodName ? String(payment.paymentMethodName) : '';
+          invoicePayment.paymentMethodId =
+            payment.paymentMethodId && payment.paymentMethodId.trim()
+              ? payment.paymentMethodId.trim()
+              : null;
+          console.log('[InvoicePayment] Saving payment:', {
+            paymentMethodId: invoicePayment.paymentMethodId,
+            paymentMethodName: payment.paymentMethodName,
+            cardBrand: payment.cardBrand,
+          });
+          invoicePayment.paymentMethodName = payment.paymentMethodName || '';
           invoicePayment.dueDate = payment.dueDate;
-          invoicePayment.controlNumber = payment.controlNumber ? String(payment.controlNumber) : '';
-          invoicePayment.description = payment.description ? String(payment.description) : '';
-          invoicePayment.installments = payment.installments ? Number(payment.installments) : 1;
-          invoicePayment.installmentValue = payment.installmentValue ? Number(payment.installmentValue).toFixed(2) : '';
-          invoicePayment.totalValue = payment.totalValue ? Number(payment.totalValue).toFixed(2) : '';
-          invoicePayment.cardBrand = payment.cardBrand ? String(payment.cardBrand) : undefined;
+          invoicePayment.controlNumber = payment.controlNumber || '';
+          invoicePayment.description = payment.description || '';
+          invoicePayment.installments = payment.installments || 1;
+          invoicePayment.installmentValue = payment.installmentValue
+            ? Number(payment.installmentValue).toFixed(2)
+            : '0.00';
+          invoicePayment.totalValue = payment.totalValue
+            ? Number(payment.totalValue).toFixed(2)
+            : '0.00';
+          invoicePayment.cardBrand = payment.cardBrand || null;
           invoicePayment.invoice = invoice;
           await manager.save(invoicePayment);
         }
@@ -141,6 +177,10 @@ export class InvoicesService {
       const { status, performedBy, notes, items, payments, discount, discountType } = data;
       const invoice = await manager.findOne(Invoice, { where: { id } });
       if (!invoice) throw new NotFoundException('Invoice not found');
+      if (data.type === 'invoice' && invoice.type !== 'invoice') {
+        await manager.update(Invoice, id, { type: 'invoice' });
+        invoice.type = 'invoice'; // Atualiza o objeto em memória também
+      }
       const subtotal = items.reduce((sum, item) => sum + (Number(item.price) * Number(item.quantity)), 0);
       const discountValue = discountType === 'percentage' ? (subtotal * discount / 100) : discount;
       const total = subtotal - discountValue;
@@ -167,26 +207,78 @@ export class InvoicesService {
       }
       // Atualizar pagamentos
       await manager.delete(InvoicePayment, { invoice: { id } });
-      if (payments.length > 0) {
+      if (Array.isArray(payments) && payments.length > 0) {
         for (const payment of payments) {
           // Permitir pagamentos avulsos (dinheiro, pix, etc.) sem paymentMethod
           // Para cartão, preencher paymentMethod, cardBrand e installments
           const invoicePayment = new InvoicePayment();
-          invoicePayment.paymentMethodId = payment.paymentMethodId ? String(payment.paymentMethodId) : '';
-          invoicePayment.paymentMethodName = payment.paymentMethodName ? String(payment.paymentMethodName) : '';
+          invoicePayment.paymentMethodId = payment.paymentMethodId && payment.paymentMethodId.trim() ? payment.paymentMethodId.trim() : null;
+          invoicePayment.paymentMethodName = payment.paymentMethodName || '';
           invoicePayment.dueDate = payment.dueDate;
-          invoicePayment.controlNumber = payment.controlNumber ? String(payment.controlNumber) : '';
-          invoicePayment.description = payment.description ? String(payment.description) : '';
-          invoicePayment.installments = payment.installments ? Number(payment.installments) : 1;
-          invoicePayment.installmentValue = payment.installmentValue ? Number(payment.installmentValue).toFixed(2) : '';
-          invoicePayment.totalValue = payment.totalValue ? Number(payment.totalValue).toFixed(2) : '';
-          invoicePayment.cardBrand = payment.cardBrand ? String(payment.cardBrand) : undefined;
+          invoicePayment.controlNumber = payment.controlNumber || '';
+          invoicePayment.description = payment.description || '';
+          invoicePayment.installments = payment.installments || 1;
+          invoicePayment.installmentValue = payment.installmentValue ? Number(payment.installmentValue).toFixed(2) : '0.00';
+          invoicePayment.totalValue = payment.totalValue ? Number(payment.totalValue).toFixed(2) : '0.00';
+          invoicePayment.cardBrand = payment.cardBrand || null;
           invoicePayment.invoice = invoice;
           await manager.save(invoicePayment);
         }
         const totalPayments = payments.reduce((sum, payment) => sum + Number(payment.totalValue), 0);
         if (totalPayments >= total) {
           await manager.update(Invoice, id, { status: 'paid' });
+          // Sincronizar protocolos adquiridos
+          for (const item of items) {
+            let patientProtocol = await manager.getRepository('PatientProtocol').findOne({
+              where: { patientId: invoice.patientId, protocolId: item.protocolId }
+            });
+            if (!patientProtocol) {
+              patientProtocol = await manager.getRepository('PatientProtocol').save({
+                patientId: invoice.patientId,
+                protocolId: item.protocolId,
+                purchaseDate: new Date(),
+                status: 'active',
+              });
+              // Cria as sessões para o novo PatientProtocol usando o mesmo manager
+              const protocol = await manager.getRepository('Protocol').findOne({
+                where: { id: patientProtocol.protocolId },
+                relations: ['protocolServices'],
+              });
+              console.log('[INVOICE] protocol.protocolServices:', protocol?.protocolServices);
+              if (protocol && protocol.protocolServices && protocol.protocolServices.length > 0) {
+                for (const protocolService of protocol.protocolServices) {
+                  for (let i = 1; i <= protocolService.numberOfSessions; i++) {
+                    await manager.getRepository('PatientServiceSession').save({
+                      patientProtocolId: patientProtocol.id,
+                      protocolServiceId: protocolService.id,
+                      sessionNumber: i,
+                      status: 'scheduled',
+                    });
+                    console.log('[INVOICE] Sessão criada:', { patientProtocolId: patientProtocol.id, protocolServiceId: protocolService.id, sessionNumber: i });
+                  }
+                }
+              } else {
+                console.log('[INVOICE] Protocolo ou serviços não encontrados ao criar PatientProtocol!');
+              }
+            }
+          }
+        } else if (totalPayments > 0) {
+          // Sincronizar protocolos adquiridos para qualquer pagamento parcial ou total
+          for (const item of items) {
+            let patientProtocol = await manager.getRepository('PatientProtocol').findOne({
+              where: { patientId: invoice.patientId, protocolId: item.protocolId }
+            });
+            if (!patientProtocol) {
+              patientProtocol = await manager.getRepository('PatientProtocol').save({
+                patientId: invoice.patientId,
+                protocolId: item.protocolId,
+                purchaseDate: new Date(),
+                status: 'active',
+              });
+              // Cria as sessões para o novo PatientProtocol
+              await this.patientProtocolsService.createSessionsForPatientProtocol(patientProtocol.id);
+            }
+          }
         }
       }
       return this.findOne(id);

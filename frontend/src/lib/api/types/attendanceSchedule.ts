@@ -43,6 +43,7 @@ export interface AttendanceSchedule {
     id: string;
     name: string;
   };
+  sessionNumber?: number;
 }
 
 export interface CreateAttendanceScheduleData {

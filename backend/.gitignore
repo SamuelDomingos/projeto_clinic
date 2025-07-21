@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 # compiled output
 /dist
 /node_modules
@@ -59,4 +59,4 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 =======
 backend/node_modules/
 frontend/node_modules/ 
->>>>>>> 1a974a1090790b01ac815b6bd8d1994840b1c429
+

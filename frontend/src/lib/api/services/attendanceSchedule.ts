@@ -21,7 +21,9 @@ export const attendanceScheduleApi = {
       if (params?.attendanceType) queryParams.append('attendanceType', params.attendanceType);
       if (params?.isBlocked !== undefined) queryParams.append('isBlocked', String(params.isBlocked));
 
+      console.log('[attendanceScheduleApi.list] Query params:', queryParams.toString());
       const response = await api.get<AttendanceSchedule[]>(`/attendance-schedules?${queryParams.toString()}`);
+      console.log('[attendanceScheduleApi.list] Response:', response.data);
       return response.data;
     } catch (error) {
       if (isAxiosError(error) && error.response) {
@@ -33,7 +35,9 @@ export const attendanceScheduleApi = {
 
   get: async (id: string): Promise<AttendanceSchedule> => {
     try {
+      console.log('[attendanceScheduleApi.get] ID:', id);
       const response = await api.get<AttendanceSchedule>(`/attendance-schedules/${id}`);
+      console.log('[attendanceScheduleApi.get] Response:', response.data);
       return response.data;
     } catch (error) {
       if (isAxiosError(error) && error.response) {
@@ -45,7 +49,9 @@ export const attendanceScheduleApi = {
 
   create: async (data: CreateAttendanceScheduleData): Promise<AttendanceSchedule> => {
     try {
+      console.log('[attendanceScheduleApi.create] Payload enviado:', data);
       const response = await api.post<AttendanceSchedule>('/attendance-schedules', data);
+      console.log('[attendanceScheduleApi.create] Response:', response.data);
       return response.data;
     } catch (error) {
       if (isAxiosError(error) && error.response) {
@@ -57,7 +63,9 @@ export const attendanceScheduleApi = {
 
   update: async (id: string, data: UpdateAttendanceScheduleData): Promise<AttendanceSchedule> => {
     try {
+      console.log('[attendanceScheduleApi.update] ID:', id, 'Payload:', data);
       const response = await api.patch<AttendanceSchedule>(`/attendance-schedules/${id}`, data);
+      console.log('[attendanceScheduleApi.update] Response:', response.data);
       return response.data;
     } catch (error) {
       if (isAxiosError(error) && error.response) {

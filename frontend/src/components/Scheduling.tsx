@@ -11,7 +11,7 @@ import type { Appointment as GlobalAppointment } from '@/lib/api/types/appointme
 import type { User } from '@/lib/api/types/common';
 import { userApi } from "../lib/api";
 import { attendanceScheduleApi } from "../lib/api/services/attendanceSchedule";
-import type { AttendanceSchedule } from "@/lib/api/types/attendanceSchedule";
+import type { AttendanceSchedule, CreateAttendanceScheduleData } from "@/lib/api/types/attendanceSchedule";
 
 // Status válidos para o tipo global
 const VALID_STATUSES = ["scheduled", "confirmed", "completed", "cancelled"] as const;
@@ -80,10 +80,12 @@ type AttendanceScheduleWithExtras = AttendanceSchedule & {
   status?: string;
 };
 
+type SchedulingAppointment = (Partial<AttendanceSchedule> & Partial<GlobalAppointment>) & { status?: 'scheduled' | 'confirmed' | 'completed' | 'cancelled'; id: string };
+
 export function Scheduling() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState("week");
-  const [editingAppointment, setEditingAppointment] = useState<GlobalAppointment | null>(null);
+  const [editingAppointment, setEditingAppointment] = useState<SchedulingAppointment | null>(null);
   const [editingDoctor, setEditingDoctor] = useState("");
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [doctors, setDoctors] = useState<User[]>([]);
@@ -163,60 +165,24 @@ export function Scheduling() {
     const appointment = appointments[doctor]?.[time];
     if (appointment) {
       setEditingAppointment({
-        id: appointment.id,
-        patientId: appointment.patientId,
-        doctorId: appointment.userId,
-        startTime: appointment.startTime,
-        createdAt: appointment.createdAt,
-        updatedAt: appointment.updatedAt,
-        date: appointment.date,
-        duration: appointment.duration ?? 0,
-        procedure: appointment.procedure ?? '',
-        status: (VALID_STATUSES.includes(appointment.status as ValidStatus) ? appointment.status : 'scheduled') as ValidStatus,
-        notes: appointment.observation ?? '',
+        ...appointment,
+        status: (['scheduled', 'confirmed', 'completed', 'cancelled'].includes(appointment.status) ? appointment.status : 'scheduled') as 'scheduled' | 'confirmed' | 'completed' | 'cancelled',
+        id: appointment.id || '',
+        patientId: appointment.patientId || '',
+        patient: appointment.patient
+          ? {
+              id: appointment.patient.id,
+              name: appointment.patient.name,
+              email: appointment.patient.email || '',
+              phone: appointment.patient.phone || '',
+            }
+          : { id: '', name: '', email: '', phone: '' },
       });
       setEditingDoctor(doctor);
       setIsEditorOpen(true);
     }
   };
 
-  const handleNewAppointment = (doctor: string, time: string) => {
-    setEditingAppointment(null);
-    setEditingDoctor(doctor);
-    setIsEditorOpen(true);
-  };
-
-  const handleSaveAppointment = async (appointment: GlobalAppointment) => {
-    setAppointments(prev => {
-      const newAppointments = { ...prev };
-      const doctor = doctors.find(d => d.id === appointment.doctorId);
-      if (!doctor) return prev;
-      if (!newAppointments[doctor.id]) {
-        newAppointments[doctor.id] = {};
-      }
-      newAppointments[doctor.id][appointment.startTime] = {
-        id: appointment.id,
-        patientId: appointment.patientId,
-        userId: appointment.doctorId,
-        unitId: '',
-        date: appointment.date,
-        startTime: appointment.startTime,
-        endTime: '',
-        attendanceType: 'avulso',
-        value: null,
-        isBlocked: false,
-        createdAt: '',
-        updatedAt: '',
-        patient: typeof appointment.patientId === 'string' ? { id: '', name: appointment.patientId } : undefined,
-        user: { id: appointment.doctorId, name: doctor.name },
-        observation: appointment.notes,
-        duration: appointment.duration,
-        procedure: appointment.procedure,
-        status: appointment.status,
-      };
-      return newAppointments;
-    });
-  };
 
   const onDragEnd = (result: DropResult) => {
     const { destination, source, draggableId } = result;
@@ -380,7 +346,6 @@ export function Scheduling() {
                                       ? 'border-primary bg-primary/10' 
                                       : 'border-border bg-background hover:bg-muted/50'
                                   }`}
-                                  onDoubleClick={() => handleNewAppointment(doctor.id, timeSlot)}
                                 >
                                   {appointments[doctor.id]?.[timeSlot] ? (
                                     <Draggable 
@@ -515,13 +480,8 @@ export function Scheduling() {
       </Tabs>
 
       <AppointmentEditor
-        appointment={editingAppointment}
         isOpen={isEditorOpen}
         onClose={() => setIsEditorOpen(false)}
-        onSave={handleSaveAppointment}
-        doctors={doctors}
-        allUsers={doctors}
-        patientId={typeof editingAppointment?.patientId === 'string' ? editingAppointment?.patientId : ''}
       />
     </div>
   );

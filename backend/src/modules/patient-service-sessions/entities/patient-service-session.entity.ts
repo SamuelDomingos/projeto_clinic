@@ -16,16 +16,19 @@ export class PatientServiceSession {
   @Column()
   patientProtocolId: string;
 
-  @ManyToOne(() => PatientProtocol, patientProtocol => patientProtocol.patientServiceSessions)
+  @ManyToOne(() => PatientProtocol, (patientProtocol) => patientProtocol.patientServiceSessions)
   @JoinColumn({ name: 'patientProtocolId' })
   patientProtocol: PatientProtocol;
 
   @Column()
   protocolServiceId: string;
 
-  @ManyToOne(() => ProtocolService, protocolService => protocolService.patientServiceSessions)
+  @ManyToOne(() => ProtocolService, (protocolService) => protocolService.patientServiceSessions)
   @JoinColumn({ name: 'protocolServiceId' })
   protocolService: ProtocolService;
+
+  @Column()
+  sessionNumber: number;
 
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   sessionDate: Date;

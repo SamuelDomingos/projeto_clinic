@@ -30,6 +30,7 @@ import { ChatHistoriesModule } from './modules/chat-histories/chat-histories.mod
 import { IAAnalysesModule } from './modules/ia-analyses/ia-analyses.module';
 import { VideosModule } from './modules/videos/videos.module';
 import { VideoWatchesModule } from './modules/video-watches/video-watches.module';
+import { AttendanceSchedulesModule } from './modules/attendance-schedules/attendance-schedules.module';
 // Importar módulos de agenda
 import { ScheduleConfigModule } from './modules/schedule/config/schedule-config.module';
 import { ScheduleTypeModule } from './modules/schedule/types/schedule-type.module';
@@ -74,6 +75,7 @@ import { ScheduleRuleModule } from './modules/schedule/rules/schedule-rule.modul
     ScheduleHolidayModule,
     ScheduleEventModule,
     ScheduleRuleModule,
+    AttendanceSchedulesModule, // Adicionado para ativar as rotas de agendamento
   ],
 })
 export class AppModule {}

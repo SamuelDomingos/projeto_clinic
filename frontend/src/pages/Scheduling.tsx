@@ -75,6 +75,9 @@ export default function Scheduling() {
   const { config, hours, loading: loadingConfig } = useScheduleConfig();
   const navigate = useNavigate();
 
+  console.log(schedules);
+  
+
   const loadHealthProfessionals = useCallback(async () => {
     try {
       const response = await userApi.list();

@@ -44,6 +44,7 @@ export function PatientInvoices({ patientId }: PatientInvoicesProps) {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [openModal, setOpenModal] = useState(false);
+  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [protocols, setProtocols] = useState<Protocol[]>([]);
   const [loadingProtocols, setLoadingProtocols] = useState(false);
   const { toast } = useToast();
@@ -66,7 +67,6 @@ export function PatientInvoices({ patientId }: PatientInvoicesProps) {
     try {
       const data = await protocolApi.list();
       setProtocols(data);
-      console.log('Protocolos carregados (pai):', data);
     } finally {
       setLoadingProtocols(false);
     }
@@ -93,18 +93,21 @@ export function PatientInvoices({ patientId }: PatientInvoicesProps) {
     return new Date(date).toLocaleDateString('pt-BR');
   };
 
-  // --- Novo Orçamento Modal State (mock)
-  const [tab, setTab] = useState("orcamento");
-  const [modelo, setModelo] = useState("");
-  const [procedimento, setProcedimento] = useState("");
-  const [material, setMaterial] = useState("");
-  // ... outros estados para itens, totais, etc.
+  const handleRowClick = (invoice: Invoice) => {
+    setSelectedInvoice(invoice);
+    setOpenModal(true);
+  };
+
+  const handleNewBudget = () => {
+    setSelectedInvoice(null);
+    setOpenModal(true);
+  };
 
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>Faturas e Orçamentos</CardTitle>
-        <Button onClick={() => setOpenModal(true)} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+        <Button onClick={handleNewBudget} className="bg-primary hover:bg-primary/90 text-primary-foreground">
           <Plus className="h-4 w-4 mr-2" /> Novo Orçamento
         </Button>
       </CardHeader>
@@ -130,6 +133,7 @@ export function PatientInvoices({ patientId }: PatientInvoicesProps) {
                     .map((inv, idx) => (
                       <tr
                         key={inv.id}
+                        onClick={() => handleRowClick(inv)}
                         className={
                           `border-b border-border transition-colors ${idx % 2 === 0 ? 'bg-white dark:bg-muted' : 'bg-muted/50 dark:bg-background'} hover:bg-primary/5 focus-within:bg-primary/10`
                         }
@@ -156,7 +160,7 @@ export function PatientInvoices({ patientId }: PatientInvoicesProps) {
           </div>
         )}
       </CardContent>
-      <BudgetDrawer open={openModal} onOpenChange={setOpenModal} protocols={protocols} loadingProtocols={loadingProtocols} />
+      <BudgetDrawer open={openModal} onOpenChange={setOpenModal} protocols={protocols} loadingProtocols={loadingProtocols} invoiceToEdit={selectedInvoice} onSaved={loadInvoices} patientId={patientId} />
     </Card>
   );
 } 

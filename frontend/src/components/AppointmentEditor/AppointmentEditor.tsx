@@ -65,24 +65,12 @@ import PatientInfoForm from './PatientInfoForm';
 import AdditionalInfoSection from './AdditionalInfoSection';
 import DocumentsAttachmentsSection from './DocumentsAttachmentsSection';
 import AppointmentInfoForm from './AppointmentInfoForm';
+import type { CreateAttendanceScheduleData } from '@/lib/api/types/attendanceSchedule';
+import { attendanceScheduleApi } from '@/lib/api/services/attendanceSchedule';
 
 interface AppointmentEditorProps {
-  appointment: Appointment | null;
   isOpen: boolean;
   onClose: () => void;
-  onSave: (appointment: Appointment) => Promise<void>;
-  doctors: User[];
-  allUsers: User[];
-  initialPatient?: {
-    id: string;
-    name: string;
-    email: string;
-    phone: string;
-    birthDate: string;
-    cpf: string;
-    rg: string;
-  };
-  patientId: string;
 }
 
 export type FormDataType = {
@@ -93,38 +81,41 @@ export type FormDataType = {
   duration: number;
   procedure: string;
   notes?: string;
+  unit?: string;
+  attendanceType?: string;
+  patientProtocolId?: string;
+  serviceSessionId?: string;
+  sessionNumber?: number;
   [key: string]: string | number | undefined;
 };
 
 export default function AppointmentEditor({
-  appointment,
   isOpen,
   onClose,
-  onSave,
-  doctors,
-  allUsers,
-  initialPatient,
-  patientId: propPatientId,
 }: AppointmentEditorProps) {
   const [formData, setFormData] = useState<FormDataType>({
-    patientId: propPatientId || '',
-    doctorId: appointment?.doctorId || '',
-    date: appointment?.date || new Date().toISOString().split('T')[0],
-    startTime: appointment?.startTime || '',
-    duration: appointment?.duration || 30,
-    procedure: appointment?.procedure || '',
-    notes: appointment?.notes || '',
+    patientId: '',
+    doctorId: '',
+    date: new Date().toISOString().split('T')[0],
+    startTime: '',
+    duration: 30,
+    procedure: '',
+    notes: '',
     unit: '',
+    attendanceType: '',
+    patientProtocolId: '',
+    serviceSessionId: '',
+    sessionNumber: undefined,
   });
 
   const [selectedTab, setSelectedTab] = useState("scheduling");
   const [patientDetailsFormData, setPatientDetailsFormData] = useState({
-    name: initialPatient?.name || '',
-    email: initialPatient?.email || '',
-    phone: initialPatient?.phone || '',
-    birthDate: initialPatient?.birthDate || '',
-    cpf: initialPatient?.cpf || '',
-    rg: initialPatient?.rg || '',
+    name: '',
+    email: '',
+    phone: '',
+    birthDate: '',
+    cpf: '',
+    rg: '',
   });
 
   const [serviceType, setServiceType] = useState("");
@@ -135,13 +126,10 @@ export default function AppointmentEditor({
   const [reimbursementPayment, setReimbursementPayment] = useState(false);
   const [blockSchedule, setBlockSchedule] = useState(false);
   const [isAdditionalInfoOpen, setIsAdditionalInfoOpen] = useState(false);
-  const [isDocumentsAttachmentsOpen, setIsDocumentsAttachmentsOpen] =
-    useState(false);
+  const [isDocumentsAttachmentsOpen, setIsDocumentsAttachmentsOpen] = useState(false);
   const [availableDoctors, setAvailableDoctors] = useState<User[]>([]);
   const [availableUsers, setAvailableUsers] = useState<User[]>([]);
   const [units, setUnits] = useState<Supplier[]>([]);
-
-  // NOVOS STATES PARA PACIENTES, TIPOS DE ATENDIMENTO E PROTOCOLOS
   const [patients, setPatients] = useState<Patient[]>([]);
   const [patientSearch, setPatientSearch] = useState('');
   const [scheduleTypes, setScheduleTypes] = useState<ScheduleType[]>([]);
@@ -156,8 +144,6 @@ export default function AppointmentEditor({
   const [protocolSearch, setProtocolSearch] = useState('');
   const [protocolSearchOpen, setProtocolSearchOpen] = useState(false);
   const [selectedProtocolsToBuy, setSelectedProtocolsToBuy] = useState<Protocol[]>([]);
-
-  // Estados para pagamentos
   const [pagamentos, setPagamentos] = useState<Array<{
     forma: string;
     valor: string;
@@ -180,54 +166,34 @@ export default function AppointmentEditor({
     observacao: '',
     pessoa: 'juridica' as 'juridica' | 'fisica',
   });
-
-  // Estados para informações adicionais
   const [occupation, setOccupation] = useState('');
   const [maritalStatus, setMaritalStatus] = useState('');
   const [bloodType, setBloodType] = useState('');
   const [allergies, setAllergies] = useState('');
   const [files, setFiles] = useState<FileList | null>(null);
-
-  // Adicionar estado para sessão selecionada
   const [selectedSession, setSelectedSession] = useState<{
     protocolId: string;
     serviceId: string;
     sessionNumber: number;
   } | null>(null);
-
   const { toast } = useToast();
 
   useEffect(() => {
     if (isOpen) {
-      loadDoctorsAndUsers();
-      loadUnits();
-      // BUSCA DE PACIENTES (AUTOCOMPLETE)
+      // Carregar médicos (usuários com role 'health_professional')
+      userApi.list({ role: 'health_professional' }).then(setAvailableDoctors);
+      // Carregar todos os usuários
+      userApi.list().then(setAvailableUsers);
+      // Carregar unidades
+      supplierApi.getSuppliers({ category: 'unidade' }).then(setUnits);
+      // Carregar pacientes
       patientApi.getPatients().then(setPatients);
-      // BUSCA DE TIPOS DE ATENDIMENTO
+      // Carregar tipos de atendimento
       getScheduleTypes().then(res => setScheduleTypes(res.data));
-      // BUSCA DE PROTOCOLOS E SESSÕES DO PACIENTE
-      if (formData.patientId) {
-        Promise.all([
-          patientProtocolApi.list(),
-          protocolApi.list()
-        ]).then(([protocols, allProtocols]) => {
-          const protocolsForPatient = protocols.filter(p => p.patientId === formData.patientId);
-          // Popular o campo protocol em cada patientProtocol
-          const populated = protocolsForPatient.map(p => ({
-            ...p,
-            protocol: allProtocols.find(proto => proto.id === p.protocolId) || null
-          }));
-          setPatientProtocols(populated);
-          patientServiceSessionApi.list().then(sessions => {
-            setServiceSessions(sessions.filter(s => protocolsForPatient.some(p => p.id === s.patientProtocolId)));
-          });
-        });
-      } else {
-        setPatientProtocols([]);
-        setServiceSessions([]);
-      }
+      // Carregar protocolos disponíveis
+      protocolApi.list().then(setProtocolsAvailable);
     }
-  }, [isOpen, formData.patientId]);
+  }, [isOpen]);
 
   // Buscar protocolos disponíveis para compra ao abrir aba Protocolos
   useEffect(() => {
@@ -240,6 +206,36 @@ export default function AppointmentEditor({
   useEffect(() => {
     setShowFinanceiro(selectedProtocolsToBuy.length > 0);
   }, [selectedProtocolsToBuy]);
+
+  useEffect(() => {
+    if (formData.patientId) {
+      patientProtocolApi.list().then(async (allProtocols) => {
+        const filtered = allProtocols.filter(p => p.patientId === formData.patientId);
+        // Buscar detalhes completos do protocolo para cada PatientProtocol
+        const enriched = await Promise.all(filtered.map(async (p) => {
+          if (!p.protocolId) return p;
+          try {
+            const protocolDetails = await protocolApi.getById(p.protocolId);
+            return { ...p, protocol: protocolDetails };
+          } catch (e) {
+            return p;
+          }
+        }));
+        setPatientProtocols(enriched);
+      });
+    } else {
+      setPatientProtocols([]);
+    }
+  }, [formData.patientId]);
+
+  // Buscar sessões do protocolo do paciente ao selecionar protocolo
+  useEffect(() => {
+    if (formData.patientProtocolId) {
+      patientProtocolApi.getSessions(formData.patientProtocolId).then(setServiceSessions);
+    } else {
+      setServiceSessions([]);
+    }
+  }, [formData.patientProtocolId]);
 
   const loadDoctorsAndUsers = async () => {
     try {
@@ -292,7 +288,7 @@ export default function AppointmentEditor({
     }
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // Validação dos campos obrigatórios
@@ -315,15 +311,31 @@ export default function AppointmentEditor({
       });
       return;
     }
+    if (!formData.attendanceType) {
+      toast({
+        title: "Selecione o tipo de atendimento",
+        description: "Escolha entre avulso ou protocolo.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     try {
-      await onSave({
-        ...formData,
-        id: String(formData.id || ''),
-        status: 'scheduled',
-        createdAt: String(formData.createdAt || ''),
-        updatedAt: String(formData.updatedAt || ''),
-      });
+      const payload: CreateAttendanceScheduleData = {
+        patientId: String(formData.patientId),
+        userId: String(formData.doctorId),
+        unitId: String(formData.unit),
+        date: formData.date,
+        startTime: String(formData.startTime),
+        endTime: String(formData.endTime || ''),
+        attendanceType: formData.attendanceType as 'protocolo' | 'avulso',
+        value: typeof formData.value === 'number' ? formData.value : null,
+        patientProtocolId: formData.patientProtocolId ? String(formData.patientProtocolId) : undefined,
+        serviceSessionId: formData.serviceSessionId ? String(formData.serviceSessionId) : undefined,
+        observation: formData.notes || '',
+        isBlocked: false,
+      };
+      await attendanceScheduleApi.create(payload);
       toast({
         title: "Agendamento criado com sucesso!",
         description: "O atendimento foi agendado.",
@@ -332,7 +344,7 @@ export default function AppointmentEditor({
     } catch (error) {
       toast({
         title: "Erro ao criar agendamento",
-        description: "Verifique os dados e tente novamente.",
+        description: error?.message || JSON.stringify(error),
         variant: "destructive",
       });
     }
@@ -431,22 +443,32 @@ export default function AppointmentEditor({
 
   // Função para marcar/agendar sessão
   function handleMarkSession(protocol, ps, sessionNumber) {
+    // Buscar a sessão existente para este protocolo, serviço e número
+    const session = serviceSessions.find(
+      s => s.patientProtocolId === protocol.id &&
+           s.protocolServiceId === ps.id &&
+           s.sessionNumber === sessionNumber
+    );
     setSelectedSession({
       protocolId: protocol.id,
-      serviceId: ps.serviceId,
+      serviceId: ps.id,
       sessionNumber,
     });
     // Buscar próximo horário disponível para o profissional selecionado
     const slot = getNextAvailableSlot(formData.doctorId);
-    setFormData(prev => ({
-      ...prev,
+    const newFormData = {
+      ...formData,
       attendanceType: 'protocolo',
       patientProtocolId: protocol.id,
-      serviceSessionId: ps.serviceId,
+      serviceSessionId: session ? session.id : '', // Usar o id da sessão existente
       sessionNumber,
       date: slot.date,
       startTime: slot.startTime,
-    }));
+      doctorId: formData.doctorId || (availableDoctors[0]?.id || ''),
+      unit: formData.unit || (units[0]?.id || ''),
+    };
+    if ('protocolServiceId' in newFormData) delete newFormData.protocolServiceId;
+    setFormData(newFormData);
   }
 
   // Função para buscar próximo horário disponível (simulação)
