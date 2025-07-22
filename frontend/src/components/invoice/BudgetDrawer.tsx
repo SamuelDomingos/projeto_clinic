@@ -410,9 +410,10 @@ export function BudgetDrawer({ open, onOpenChange, protocols, loadingProtocols, 
         // Criação
         const createData = {
           ...updateData,
-          type: "budget",
+          type: "budget" as const,
           patientId,
           performedBy: "usuário logado", // ajuste conforme necessário
+          protocolId: selectedProtocolIds[0] || undefined,
         };
         await invoiceApi.create(createData);
         toast({ title: "Sucesso", description: "Orçamento criado com sucesso!" });

@@ -136,6 +136,7 @@ export default function AppointmentEditor({
   const [selectedScheduleType, setSelectedScheduleType] = useState<string>('');
   const [patientProtocols, setPatientProtocols] = useState<PatientProtocol[]>([]);
   const [serviceSessions, setServiceSessions] = useState<PatientServiceSession[]>([]);
+  const [loadingServiceSessions, setLoadingServiceSessions] = useState(false);
   const [selectedProtocolId, setSelectedProtocolId] = useState<string>('');
   const [selectedServiceSessionId, setSelectedServiceSessionId] = useState<string>('');
   const [popoverOpen, setPopoverOpen] = useState(false);
@@ -209,33 +210,49 @@ export default function AppointmentEditor({
 
   useEffect(() => {
     if (formData.patientId) {
-      patientProtocolApi.list().then(async (allProtocols) => {
-        const filtered = allProtocols.filter(p => p.patientId === formData.patientId);
+      setLoadingServiceSessions(true);
+      Promise.all([
+        patientProtocolApi.list(),
+        patientServiceSessionApi.list()
+      ])
+      .then(async ([allProtocols, allSessions]) => {
+        // Filtrar protocolos pelo patientId após recebê-los
+        const filteredProtocols = allProtocols.filter(p => p.patientId === formData.patientId);
+        
         // Buscar detalhes completos do protocolo para cada PatientProtocol
-        const enriched = await Promise.all(filtered.map(async (p) => {
-          if (!p.protocolId) return p;
-          try {
-            const protocolDetails = await protocolApi.getById(p.protocolId);
-            return { ...p, protocol: protocolDetails };
-          } catch (e) {
-            return p;
-          }
-        }));
+        const enriched = await Promise.all(
+          filteredProtocols.map(async (p) => {
+            if (!p.protocolId) return p;
+            try {
+              const protocolDetails = await protocolApi.getById(p.protocolId);
+              return { ...p, protocol: protocolDetails };
+            } catch (e) {
+              console.error(`Erro ao buscar detalhes do protocolo ${p.protocolId}`, e);
+              return p; // Retorna o protocolo do paciente mesmo se os detalhes falharem
+            }
+          })
+        );
         setPatientProtocols(enriched);
+        setServiceSessions(allSessions);
+      })
+      .catch(error => {
+        console.error("Erro ao carregar protocolos ou sessões do paciente:", error);
+        toast({
+          title: "Erro ao carregar dados",
+          description: "Não foi possível carregar os protocolos e sessões do paciente.",
+          variant: "destructive",
+        });
+        setPatientProtocols([]);
+        setServiceSessions([]);
+      })
+      .finally(() => {
+        setLoadingServiceSessions(false);
       });
     } else {
       setPatientProtocols([]);
-    }
-  }, [formData.patientId]);
-
-  // Buscar sessões do protocolo do paciente ao selecionar protocolo
-  useEffect(() => {
-    if (formData.patientProtocolId) {
-      patientProtocolApi.getSessions(formData.patientProtocolId).then(setServiceSessions);
-    } else {
       setServiceSessions([]);
     }
-  }, [formData.patientProtocolId]);
+  }, [formData.patientId, toast]);
 
   const loadDoctorsAndUsers = async () => {
     try {
@@ -321,20 +338,33 @@ export default function AppointmentEditor({
     }
 
     try {
+      // Montar payload com tipos corretos e sem campos undefined
       const payload: CreateAttendanceScheduleData = {
         patientId: String(formData.patientId),
         userId: String(formData.doctorId),
         unitId: String(formData.unit),
-        date: formData.date,
+        date: String(formData.date),
         startTime: String(formData.startTime),
-        endTime: String(formData.endTime || ''),
+        endTime: typeof formData.endTime !== 'undefined' ? String(formData.endTime) : '',
         attendanceType: formData.attendanceType as 'protocolo' | 'avulso',
-        value: typeof formData.value === 'number' ? formData.value : null,
-        patientProtocolId: formData.patientProtocolId ? String(formData.patientProtocolId) : undefined,
-        serviceSessionId: formData.serviceSessionId ? String(formData.serviceSessionId) : undefined,
-        observation: formData.notes || '',
-        isBlocked: false,
+        value: typeof formData.value === 'number' ? formData.value : (formData.value ? Number(formData.value) : null),
+        observation: typeof formData.observation !== 'undefined' ? String(formData.observation) : '',
+        isBlocked: typeof formData.isBlocked === 'boolean' ? formData.isBlocked : false,
       };
+      if (typeof formData.patientProtocolId !== 'undefined' && formData.patientProtocolId !== '') {
+        payload.patientProtocolId = String(formData.patientProtocolId);
+      }
+      if (typeof formData.serviceSessionId !== 'undefined' && formData.serviceSessionId !== '') {
+        payload.serviceSessionId = String(formData.serviceSessionId);
+      } else if (formData.attendanceType === 'protocolo') {
+        toast({
+          title: 'Selecione uma sessão',
+          description: 'Para agendar um atendimento de protocolo, selecione uma sessão disponível.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      
       await attendanceScheduleApi.create(payload);
       toast({
         title: "Agendamento criado com sucesso!",
@@ -349,7 +379,7 @@ export default function AppointmentEditor({
       });
     }
   };
-
+  
   // BUSCA DE PACIENTES PARA AUTOCOMPLETE
   const filteredPatients = patientSearch.trim()
     ? patients.filter(p => p.name.toLowerCase().includes(patientSearch.toLowerCase()))
@@ -442,33 +472,43 @@ export default function AppointmentEditor({
   };
 
   // Função para marcar/agendar sessão
-  function handleMarkSession(protocol, ps, sessionNumber) {
-    // Buscar a sessão existente para este protocolo, serviço e número
-    const session = serviceSessions.find(
-      s => s.patientProtocolId === protocol.id &&
-           s.protocolServiceId === ps.id &&
-           s.sessionNumber === sessionNumber
-    );
-    setSelectedSession({
-      protocolId: protocol.id,
-      serviceId: ps.id,
-      sessionNumber,
-    });
-    // Buscar próximo horário disponível para o profissional selecionado
-    const slot = getNextAvailableSlot(formData.doctorId);
-    const newFormData = {
-      ...formData,
-      attendanceType: 'protocolo',
-      patientProtocolId: protocol.id,
-      serviceSessionId: session ? session.id : '', // Usar o id da sessão existente
-      sessionNumber,
-      date: slot.date,
-      startTime: slot.startTime,
-      doctorId: formData.doctorId || (availableDoctors[0]?.id || ''),
-      unit: formData.unit || (units[0]?.id || ''),
-    };
-    if ('protocolServiceId' in newFormData) delete newFormData.protocolServiceId;
-    setFormData(newFormData);
+  async function handleMarkSession(protocol, ps, sessionNumber) {
+    try {
+      // Primeiro, encontre a sessão correta com base no protocolo, serviço e número da sessão
+      const sessionForService = serviceSessions.find(
+        s => String(s.patientProtocolId) === String(protocol.id) && 
+             String(s.protocolServiceId) === String(ps.id) && 
+             Number(s.sessionNumber) === Number(sessionNumber)
+      );
+
+      if (!sessionForService) {
+        toast({ title: 'Erro ao selecionar sessão', description: 'Sessão não encontrada', variant: 'destructive' });
+        return;
+      }
+
+      // Apenas seleciona a sessão e atualiza o formData
+      setSelectedSession({
+        protocolId: protocol.id,
+        serviceId: ps.id,
+        sessionNumber: Number(sessionNumber)
+      });
+      
+      // Atualiza o formData com os dados da sessão selecionada
+      setFormData(prev => ({
+        ...prev,
+        patientProtocolId: protocol.id,
+        serviceSessionId: sessionForService.id,
+        sessionNumber: Number(sessionNumber),
+        attendanceType: 'protocolo'
+      }));
+      
+      // Muda para a aba de agendamento para que o usuário possa preencher os outros dados
+      setSelectedTab("scheduling");
+      
+      toast({ title: 'Sessão selecionada', description: 'Preencha os dados restantes para agendar', variant: 'default' });
+    } catch (error) {
+      toast({ title: 'Erro ao selecionar sessão', description: error?.message || JSON.stringify(error), variant: 'destructive' });
+    }
   }
 
   // Função para buscar próximo horário disponível (simulação)
@@ -862,32 +902,47 @@ export default function AppointmentEditor({
                                           <span className="text-xs text-muted-foreground">{used}/{total}</span>
                                       </div>
                                         <div className="flex gap-1 mt-0.5">
-                                          {Array.from({ length: total }, (_, i) => {
-                                            const isUsed = i < used;
-                                            const isSelected =
-                                              selectedSession &&
-                                              selectedSession.protocolId === protocol.id &&
-                                              selectedSession.serviceId === ps.serviceId &&
-                                              selectedSession.sessionNumber === i + 1;
-                                            return (
-                                              <span
-                                            key={ps.id + '-' + (i + 1)}
-                                                className={
-                                                  'inline-block w-4 h-4 rounded-full transition ' +
-                                                  (isUsed
-                                                    ? 'bg-green-500'
-                                                    : isSelected
-                                                      ? 'bg-blue-500 ring-2 ring-blue-300 cursor-pointer'
-                                                      : 'bg-muted border border-gray-300 cursor-pointer hover:bg-blue-400')
-                                                }
-                                                title={isUsed ? 'Sessão utilizada' : 'Clique para agendar esta sessão'}
-                                                onClick={() => {
-                                                  if (!isUsed) handleMarkSession(protocol, ps, i + 1);
-                                                }}
-                                                style={{ cursor: isUsed ? 'default' : 'pointer' }}
-                                              />
-                                  );
-                                })}
+                                          {(() => {
+                                            const serviceId = String(ps.id);
+                                            const protocolId = String(protocol.id);
+                                            const sessionsForService = serviceSessions.filter(
+                                              s => String(s.protocolServiceId) === serviceId && String(s.patientProtocolId) === protocolId
+                                            );
+                                            if (loadingServiceSessions) {
+                                              return <span className="text-xs text-muted-foreground">Carregando sessões...</span>;
+                                            }
+                                            if (sessionsForService.length === 0) {
+                                              return <span className="text-xs text-muted-foreground">Nenhuma sessão encontrada</span>;
+                                            }
+                                            return sessionsForService.map((session) => {
+                                              const isUsed = session.status === 'completed';
+                                              const isSelected =
+                                                selectedSession &&
+                                                String(selectedSession.protocolId) === protocolId &&
+                                                String(selectedSession.serviceId) === serviceId &&
+                                                Number(selectedSession.sessionNumber) === Number(session.sessionNumber);
+                                              return (
+                                                <span
+                                                  key={serviceId + '-' + session.sessionNumber}
+                                                  className={
+                                                    'inline-block w-4 h-4 rounded-full transition ' +
+                                                    (isUsed
+                                                      ? 'bg-green-500'
+                                                      : isSelected
+                                                        ? 'bg-blue-500 ring-2 ring-blue-300 cursor-pointer'
+                                                        : 'bg-muted border border-gray-300 cursor-pointer hover:bg-blue-400')
+                                                  }
+                                                  title={isUsed ? 'Sessão utilizada' : loadingServiceSessions ? 'Carregando sessões...' : 'Clique para agendar esta sessão'}
+                                                  onClick={() => {
+                                                    if (!isUsed && !loadingServiceSessions && serviceSessions.length > 0) {
+                                                      handleMarkSession(protocol, ps, session.sessionNumber);
+                                                    }
+                                                  }}
+                                                  style={{ cursor: isUsed || loadingServiceSessions || serviceSessions.length === 0 ? 'not-allowed' : 'pointer', opacity: loadingServiceSessions || serviceSessions.length === 0 ? 0.5 : 1 }}
+                                                />
+                                              );
+                                            });
+                                          })()}
                                       </div>
                                     </div>
                                   );

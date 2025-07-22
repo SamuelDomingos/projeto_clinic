@@ -8,7 +8,18 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { invoiceApi, protocolApi, type Invoice } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import { Plus } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
 import { BudgetDrawer } from "@/components/invoice/BudgetDrawer";
 import type { Protocol } from "@/lib/api/types/protocol";
 
@@ -48,6 +59,8 @@ export function PatientInvoices({ patientId }: PatientInvoicesProps) {
   const [protocols, setProtocols] = useState<Protocol[]>([]);
   const [loadingProtocols, setLoadingProtocols] = useState(false);
   const { toast } = useToast();
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [invoiceToDelete, setInvoiceToDelete] = useState<Invoice | null>(null);
 
   useEffect(() => {
     if (patientId) {
@@ -103,6 +116,19 @@ export function PatientInvoices({ patientId }: PatientInvoicesProps) {
     setOpenModal(true);
   };
 
+  const handleDelete = async () => {
+    if (!invoiceToDelete) return;
+    try {
+      await invoiceApi.delete(invoiceToDelete.id);
+      toast({ title: "Sucesso", description: "Fatura/Orçamento deletado com sucesso!" });
+      setDeleteDialogOpen(false);
+      setInvoiceToDelete(null);
+      loadInvoices();
+    } catch (error) {
+      toast({ title: "Erro", description: "Erro ao deletar fatura/orçamento", variant: "destructive" });
+    }
+  };
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
@@ -124,6 +150,7 @@ export function PatientInvoices({ patientId }: PatientInvoicesProps) {
                   <th className="p-4 font-semibold text-muted-foreground text-left">Tipo</th>
                   <th className="p-4 font-semibold text-muted-foreground text-left">Valor</th>
                   <th className="p-4 font-semibold text-muted-foreground text-left">Status</th>
+                  <th className="p-4 font-semibold text-muted-foreground text-left">Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -146,11 +173,41 @@ export function PatientInvoices({ patientId }: PatientInvoicesProps) {
                           R$ {isNaN(Number(inv.total)) ? "0,00" : Number(inv.total).toFixed(2)}
                         </td>
                         <td className="p-4">{statusBadge(inv.status)}</td>
+                        <td className="p-4">
+                          <AlertDialog open={deleteDialogOpen && invoiceToDelete?.id === inv.id} onOpenChange={open => {
+                            setDeleteDialogOpen(open);
+                            if (!open) setInvoiceToDelete(null);
+                          }}>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-destructive hover:bg-destructive/10"
+                                onClick={e => { e.stopPropagation(); setInvoiceToDelete(inv); setDeleteDialogOpen(true); }}
+                                title="Deletar"
+                              >
+                                <Trash2 className="h-5 w-5" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Confirmar deleção</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Tem certeza que deseja deletar esta fatura/orçamento? Esta ação não pode ser desfeita.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction onClick={handleDelete}>Deletar</AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </td>
                       </tr>
                     ))
                 ) : (
                   <tr>
-                    <td colSpan={5} className="p-6 text-center text-muted-foreground text-lg">
+                    <td colSpan={6} className="p-6 text-center text-muted-foreground text-lg">
                       Nenhuma fatura ou orçamento encontrado
                     </td>
                   </tr>

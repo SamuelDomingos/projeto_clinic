@@ -20,50 +20,91 @@ export class AttendanceSchedulesService {
     let patientProtocolId: string | undefined;
     let protocolServiceId: string | undefined;
     let sessionNumber: number | undefined;
+    let userId: string | undefined;
+    let unitId: string | undefined;
+    let patientId: string | undefined;
 
-    if (
-      typeof (data as Record<string, unknown>)?.patientProtocolId === 'string'
-    ) {
+    // Extrair patientProtocolId
+    if (typeof (data as Record<string, unknown>)?.patientProtocolId === 'string') {
       patientProtocolId = (data as Record<string, string>).patientProtocolId;
     } else if (typeof data.patientProtocol === 'string') {
       patientProtocolId = data.patientProtocol;
-    } else if (
-      typeof data.patientProtocol === 'object' &&
-      data.patientProtocol &&
-      'id' in data.patientProtocol
-    ) {
+    } else if (typeof data.patientProtocol === 'object' && data.patientProtocol && 'id' in data.patientProtocol) {
       patientProtocolId = (data.patientProtocol as { id: string }).id;
     }
 
-    if (
-      typeof (data as Record<string, unknown>)?.serviceSessionId === 'string'
-    ) {
-      protocolServiceId = (data as Record<string, string>).serviceSessionId;
-    } else if (
-      typeof (data as Record<string, unknown>)?.protocolServiceId === 'string'
-    ) {
+    // Extrair serviceSessionId e protocolServiceId
+    if (typeof (data as Record<string, unknown>)?.serviceSessionId === 'string') {
+      const serviceSessionId = (data as Record<string, string>).serviceSessionId;
+      // Buscar a sessão para obter o protocolServiceId
+      const session = await this.patientServiceSessionRepository.findOne({
+        where: { id: serviceSessionId },
+      });
+      if (session) {
+        protocolServiceId = session.protocolServiceId;
+      }
+    } else if (typeof (data as Record<string, unknown>)?.protocolServiceId === 'string') {
       protocolServiceId = (data as Record<string, string>).protocolServiceId;
     } else if (typeof data.serviceSession === 'string') {
-      protocolServiceId = data.serviceSession;
-    } else if (
-      typeof data.serviceSession === 'object' &&
-      data.serviceSession &&
-      'id' in data.serviceSession
-    ) {
-      protocolServiceId = (data.serviceSession as { id: string }).id;
+      const serviceSessionId = data.serviceSession;
+      // Buscar a sessão para obter o protocolServiceId
+      const session = await this.patientServiceSessionRepository.findOne({
+        where: { id: serviceSessionId },
+      });
+      if (session) {
+        protocolServiceId = session.protocolServiceId;
+      }
+    } else if (typeof data.serviceSession === 'object' && data.serviceSession && 'id' in data.serviceSession) {
+      const serviceSessionId = (data.serviceSession as { id: string }).id;
+      // Buscar a sessão para obter o protocolServiceId
+      const session = await this.patientServiceSessionRepository.findOne({
+        where: { id: serviceSessionId },
+      });
+      if (session) {
+        protocolServiceId = session.protocolServiceId;
+      }
     }
 
-    if (
-      typeof (data as Record<string, unknown>)?.sessionNumber !== 'undefined'
-    ) {
+    // Extrair sessionNumber
+    if (typeof (data as Record<string, unknown>)?.sessionNumber !== 'undefined') {
       sessionNumber = Number((data as Record<string, unknown>).sessionNumber);
     }
 
-    // LOG: debug dos campos de protocolo
+    // Extrair userId
+    if (typeof (data as Record<string, unknown>)?.userId === 'string') {
+      userId = (data as Record<string, string>).userId;
+    } else if (typeof data.user === 'string') {
+      userId = data.user;
+    } else if (typeof data.user === 'object' && data.user && 'id' in data.user) {
+      userId = (data.user as { id: string }).id;
+    }
+
+    // Extrair unitId
+    if (typeof (data as Record<string, unknown>)?.unitId === 'string') {
+      unitId = (data as Record<string, string>).unitId;
+    } else if (typeof data.unit === 'string') {
+      unitId = data.unit;
+    } else if (typeof data.unit === 'object' && data.unit && 'id' in data.unit) {
+      unitId = (data.unit as { id: string }).id;
+    }
+
+    // Extrair patientId
+    if (typeof (data as Record<string, unknown>)?.patientId === 'string') {
+      patientId = (data as Record<string, string>).patientId;
+    } else if (typeof data.patient === 'string') {
+      patientId = data.patient;
+    } else if (typeof data.patient === 'object' && data.patient && 'id' in data.patient) {
+      patientId = (data.patient as { id: string }).id;
+    }
+
+    // LOG: debug dos campos
     console.log('DEBUG: attendanceType:', data.attendanceType);
     console.log('DEBUG: patientProtocolId:', patientProtocolId);
     console.log('DEBUG: protocolServiceId:', protocolServiceId);
     console.log('DEBUG: sessionNumber:', sessionNumber);
+    console.log('DEBUG: userId:', userId);
+    console.log('DEBUG: unitId:', unitId);
+    console.log('DEBUG: patientId:', patientId);
 
     // Se for agendamento de protocolo, crie/atualize a sessão
     if (
@@ -92,21 +133,25 @@ export class AttendanceSchedulesService {
         });
       } else {
         // Se já existe, impede agendamento duplicado
-        if (session.status === 'scheduled' || session.status === 'completed') {
-          throw new Error('Esta sessão já foi agendada ou realizada.');
+        if (session.status === 'completed') {
+          throw new Error('Esta sessão já foi realizada.');
         }
-        session.status = 'scheduled';
+        // Atualiza o status para 'completed' quando um agendamento é criado
+        session.status = 'completed';
       }
       await this.patientServiceSessionRepository.save(session);
     }
+    
     // Montar corretamente os relacionamentos para o AttendanceSchedule
     const attendance = this.attendanceScheduleRepository.create({
       ...data,
-      patientProtocol: patientProtocolId
-        ? { id: patientProtocolId }
-        : undefined,
-      serviceSession: protocolServiceId ? { id: protocolServiceId } : undefined,
+      patient: patientId ? { id: patientId } : undefined,
+      user: userId ? { id: userId } : undefined,
+      unit: unitId ? { id: unitId } : undefined,
+      patientProtocol: patientProtocolId ? { id: patientProtocolId } : undefined,
+      serviceSession: (data as Record<string, string>).serviceSessionId ? { id: (data as Record<string, string>).serviceSessionId } : undefined,
     });
+    
     // LOG: objeto a ser salvo
     console.log('Attendance a ser salvo:', attendance);
     const saved = await this.attendanceScheduleRepository.save(attendance);
@@ -137,4 +182,4 @@ export class AttendanceSchedulesService {
   async remove(id: string): Promise<void> {
     await this.attendanceScheduleRepository.delete(id);
   }
-} 
+}
