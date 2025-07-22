@@ -1,6 +1,7 @@
 import api, { isAxiosError, ApiError } from '../config';
 import { Product, StockLocation, StockMovement } from '../types';
 
+// Adicionar ao objeto inventoryApi
 export const inventoryApi = {
   // Criar novo produto
   createProduct: async (data: Omit<Product, 'id' | 'createdAt' | 'updatedAt' | 'StockLocations' | 'totalQuantity' | 'inventoryStatus'> & {
@@ -143,4 +144,95 @@ export const inventoryApi = {
       throw new Error('Erro ao atualizar movimentação');
     }
   }
-}; 
+  
+  // Criar kit
+  createKit: async (data: {
+    name: string;
+    description?: string;
+    items: { productId: string; quantity: number }[];
+  }): Promise<Kit> => {
+    try {
+      const response = await api.post<Kit>('/kits', data);
+      return response.data;
+    } catch (error) {
+      if (isAxiosError(error) && error.response) {
+        throw new Error((error.response.data as ApiError).error);
+      }
+      throw new Error('Erro ao criar kit');
+    }
+  },
+
+  // Listar kits
+  getKits: async (): Promise<Kit[]> => {
+    try {
+      const response = await api.get<Kit[]>('/kits');
+      return response.data;
+    } catch (error) {
+      if (isAxiosError(error) && error.response) {
+        throw new Error((error.response.data as ApiError).error);
+      }
+      throw new Error('Erro ao buscar kits');
+    }
+  },
+
+  // Buscar kit específico
+  getKit: async (kitId: string): Promise<Kit> => {
+    try {
+      const response = await api.get<Kit>(`/kits/${kitId}`);
+      return response.data;
+    } catch (error) {
+      if (isAxiosError(error) && error.response) {
+        throw new Error((error.response.data as ApiError).error);
+      }
+      throw new Error('Erro ao buscar kit');
+    }
+  },
+
+  // Atualizar kit
+  updateKit: async (kitId: string, data: {
+    name?: string;
+    description?: string;
+    status?: 'active' | 'inactive';
+    items?: { productId: string; quantity: number }[];
+  }): Promise<Kit> => {
+    try {
+      const response = await api.put<Kit>(`/kits/${kitId}`, data);
+      return response.data;
+    } catch (error) {
+      if (isAxiosError(error) && error.response) {
+        throw new Error((error.response.data as ApiError).error);
+      }
+      throw new Error('Erro ao atualizar kit');
+    }
+  },
+
+  // Remover kit
+  deleteKit: async (kitId: string): Promise<void> => {
+    try {
+      await api.delete(`/kits/${kitId}`);
+    } catch (error) {
+      if (isAxiosError(error) && error.response) {
+        throw new Error((error.response.data as ApiError).error);
+      }
+      throw new Error('Erro ao deletar kit');
+    }
+  },
+
+  // Dar baixa em kit
+  removeKitStock: async (data: {
+    kitId: string;
+    locationId: string;
+    quantity: number;
+    reason: string;
+  }): Promise<any> => {
+    try {
+      const response = await api.post('/kits/remove-stock', data);
+      return response.data;
+    } catch (error) {
+      if (isAxiosError(error) && error.response) {
+        throw new Error((error.response.data as ApiError).error);
+      }
+      throw new Error('Erro ao dar baixa no kit');
+    }
+  },
+};

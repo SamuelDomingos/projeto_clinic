@@ -45,4 +45,25 @@ export interface Product {
   stockLocations?: StockLocation[];
   createdAt: string;
   updatedAt: string;
-} 
+}
+
+
+// ... tipos existentes
+
+export interface KitItem {
+  id: string;
+  kitId: string;
+  productId: string;
+  quantity: number;
+  product?: Product;
+}
+
+export interface Kit {
+  id: string;
+  name: string;
+  description: string;
+  status: 'active' | 'inactive';
+  items: KitItem[];
+  createdAt: string;
+  updatedAt: string;
+}
