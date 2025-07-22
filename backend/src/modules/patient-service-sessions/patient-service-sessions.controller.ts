@@ -38,4 +38,26 @@ export class PatientServiceSessionsController {
   async remove(@Param('id') id: string) {
     return this.patientServiceSessionsService.remove(id);
   }
-} 
+
+  @Get('progress/:patientProtocolId/:protocolServiceId')
+  async getSessionProgress(
+    @Param('patientProtocolId') patientProtocolId: string,
+    @Param('protocolServiceId') protocolServiceId: string
+  ) {
+    const completedSessions = await this.patientServiceSessionsService.getCompletedSessionsCount(
+      patientProtocolId,
+      protocolServiceId
+    );
+    
+    const totalSessions = await this.patientServiceSessionsService.getTotalSessionsCount(
+      patientProtocolId,
+      protocolServiceId
+    );
+    
+    return {
+      completed: completedSessions,
+      total: totalSessions,
+      progress: `${completedSessions}/${totalSessions}`
+    };
+  }
+}

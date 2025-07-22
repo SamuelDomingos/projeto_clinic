@@ -8,7 +8,7 @@ export const protocolApi = {
       const response = await api.get<Protocol[]>('/protocols');
       return response.data.map(protocol => ({
         ...protocol,
-        services: protocol.services || protocol.ProtocolServices || []
+        services: protocol.services || protocol.protocolServices || []
       }));
     } catch (error) {
       if (isAxiosError(error) && error.response?.data) {
@@ -24,7 +24,7 @@ export const protocolApi = {
       const protocol = response.data;
       return {
         ...protocol,
-        services: protocol.services || protocol.ProtocolServices || []
+        services: protocol.services || protocol.protocolServices || []
       };
     } catch (error) {
       if (isAxiosError(error) && error.response) {
@@ -217,9 +217,13 @@ export const patientProtocolApi = {
 };
 
 export const patientServiceSessionApi = {
-  list: async (): Promise<PatientServiceSession[]> => {
+  list: async (params?: { patientProtocolId?: string }): Promise<PatientServiceSession[]> => {
     try {
-      const response = await api.get<PatientServiceSession[]>('/patient-service-sessions');
+      let url = '/patient-service-sessions';
+      if (params && params.patientProtocolId) {
+        url += `?patientProtocolId=${encodeURIComponent(params.patientProtocolId)}`;
+      }
+      const response = await api.get<PatientServiceSession[]>(url);
       return response.data;
     } catch (error) {
       if (isAxiosError(error) && error.response) {
