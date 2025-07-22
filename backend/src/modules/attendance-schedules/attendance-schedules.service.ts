@@ -21,6 +21,15 @@ export class AttendanceSchedulesService {
     let protocolServiceId: string | undefined;
     let sessionNumber: number | undefined;
 
+    // Se não foi fornecido professionalId mas foi fornecido userId, use userId como professionalId
+    if (!data.professionalId && data.user) {
+      if (typeof data.user === 'string') {
+        data.professionalId = data.user;
+      } else if (typeof data.user === 'object' && data.user && 'id' in data.user) {
+        data.professionalId = (data.user as { id: string }).id;
+      }
+    }
+
     if (
       typeof (data as Record<string, unknown>)?.patientProtocolId === 'string'
     ) {
@@ -106,6 +115,7 @@ export class AttendanceSchedulesService {
         ? { id: patientProtocolId }
         : undefined,
       serviceSession: protocolServiceId ? { id: protocolServiceId } : undefined,
+      professional: data.professionalId ? { id: data.professionalId } : undefined,
     });
     // LOG: objeto a ser salvo
     console.log('Attendance a ser salvo:', attendance);
@@ -118,7 +128,7 @@ export class AttendanceSchedulesService {
   async findAll(): Promise<AttendanceSchedule[]> {
     // Buscar com todos os relacionamentos relevantes
     return this.attendanceScheduleRepository.find({
-      relations: ['patient', 'user', 'unit', 'patientProtocol', 'serviceSession'],
+      relations: ['patient', 'user', 'professional', 'unit', 'patientProtocol', 'serviceSession'],
     });
   }
 
@@ -137,4 +147,4 @@ export class AttendanceSchedulesService {
   async remove(id: string): Promise<void> {
     await this.attendanceScheduleRepository.delete(id);
   }
-} 
+}

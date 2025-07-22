@@ -96,6 +96,7 @@ export class StockMovementsService {
           status: 'pending',
           notes: `Entrada de estoque gerada automaticamente para o fornecedor ${data.locationId}`,
           reference: data.productId,
+          boletoNumber: `AUTO-${Date.now()}`, // Adicionar um número de boleto automático
           createdBy: userId,
           updatedBy: userId,
         }, userId);
@@ -263,4 +264,4 @@ export class StockMovementsService {
     await this.stockMovementRepository.remove(movement);
     return { success: true };
   }
-} 
+}

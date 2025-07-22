@@ -18,6 +18,13 @@ export class AttendanceSchedule {
   @JoinColumn({ name: 'user_id' })
   user: User;
 
+  @Column({ nullable: true })
+  professionalId: string;
+
+  @ManyToOne(() => User)
+  @JoinColumn({ name: 'professional_id' })
+  professional: User;
+
   @ManyToOne(() => Supplier)
   @JoinColumn({ name: 'unit_id' })
   unit: Supplier;
@@ -50,21 +57,4 @@ export class AttendanceSchedule {
 
   @Column({ default: false })
   isBlocked: boolean;
-
-  @ManyToOne(() => User, { nullable: true })
-  @JoinColumn({ name: 'blocked_by_user_id' })
-  blockedByUser?: User;
-
-  @Column({ nullable: true })
-  blockedByUserName?: string;
-
-  @ManyToOne(() => Supplier, { nullable: true })
-  @JoinColumn({ name: 'blocked_unit_id' })
-  blockedUnit?: Supplier;
-
-  @Column({ type: 'time', nullable: true })
-  blockedStartTime?: string;
-
-  @Column({ type: 'time', nullable: true })
-  blockedEndTime?: string;
-} 
+}

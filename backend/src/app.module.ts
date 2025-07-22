@@ -37,6 +37,7 @@ import { ScheduleTypeModule } from './modules/schedule/types/schedule-type.modul
 import { ScheduleHolidayModule } from './modules/schedule/holidays/schedule-holiday.module';
 import { ScheduleEventModule } from './modules/schedule/events/schedule-event.module';
 import { ScheduleRuleModule } from './modules/schedule/rules/schedule-rule.module';
+import { KitsModule } from './modules/kits/kits.module';
 
 @Module({
   imports: [
@@ -76,6 +77,7 @@ import { ScheduleRuleModule } from './modules/schedule/rules/schedule-rule.modul
     ScheduleEventModule,
     ScheduleRuleModule,
     AttendanceSchedulesModule, // Adicionado para ativar as rotas de agendamento
+    KitsModule,
   ],
 })
 export class AppModule {}
