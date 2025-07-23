@@ -65,7 +65,6 @@ export const ScheduleGrid: React.FC<ScheduleGridProps> = ({
                   {getDayLabel ? getDayLabel(day) : day}
                 </div>
                 <div className="text-lg font-semibold mt-1 text-foreground">{dateLabel}</div>
-                <div className="text-xs text-muted-foreground mt-1">0 agendamento(s)</div>
               </div>
             );
           })}

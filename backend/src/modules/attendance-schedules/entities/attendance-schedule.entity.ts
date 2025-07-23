@@ -10,16 +10,9 @@ export class AttendanceSchedule {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @ManyToOne(() => Patient)
+  @ManyToOne(() => Patient, { nullable: true })
   @JoinColumn({ name: 'patient_id' })
-  patient: Patient;
-
-  @ManyToOne(() => User)
-  @JoinColumn({ name: 'user_id' })
-  user: User;
-
-  @Column({ nullable: true })
-  professionalId: string;
+  patient?: Patient;
 
   @ManyToOne(() => User)
   @JoinColumn({ name: 'professional_id' })

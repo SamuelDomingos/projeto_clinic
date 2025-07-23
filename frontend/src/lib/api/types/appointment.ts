@@ -4,6 +4,7 @@ export interface Appointment {
   doctorId: string;
   date: string;
   startTime: string;
+  endTime?: string; // Adicionando a propriedade endTime como opcional
   duration: number;
   procedure: string;
   status: 'scheduled' | 'confirmed' | 'completed' | 'cancelled';
@@ -40,4 +41,4 @@ export interface UpdateAppointmentData {
   procedure?: string;
   status?: 'scheduled' | 'confirmed' | 'completed' | 'cancelled';
   notes?: string;
-} 
+}

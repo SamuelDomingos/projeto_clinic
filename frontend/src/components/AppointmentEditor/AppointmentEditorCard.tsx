@@ -69,7 +69,7 @@ import AppointmentInfoForm from './AppointmentInfoForm';
 import type { CreateAttendanceScheduleData } from '@/lib/api/types/attendanceSchedule';
 import { attendanceScheduleApi } from '@/lib/api/services/attendanceSchedule';
 
-interface AppointmentEditorProps {
+interface AppointmentEditorCardProps {
   isOpen: boolean;
   onClose: () => void;
   appointment?: {
@@ -99,14 +99,16 @@ interface AppointmentEditorProps {
     attendanceType?: string;
     patientProtocol?: {
       id: string;
-      name: string;
+      name?: string;
     };
     serviceSession?: {
       id: string;
-      name: string;
+      name?: string;
       sessionNumber?: number;
     };
     isBlocked?: boolean;
+    blockedByUserId?: string;
+    blockedByUserName?: string;
   };
   onSave?: (appointment: Appointment) => Promise<void>;
   doctors?: User[];
@@ -130,13 +132,16 @@ export type FormDataType = {
   endTime?: string;
   isBlocked?: boolean;
   manualEndTime?: boolean;
+  blockedByUserId?: string;
+  blockedByUserName?: string;
   [key: string]: string | number | boolean | undefined;
 };
 
-export default function AppointmentEditor({
+export default function AppointmentEditorCard({
   isOpen,
   onClose,
-}: AppointmentEditorProps) {
+  appointment,
+}: AppointmentEditorCardProps) {
   const [formData, setFormData] = useState<FormDataType>({
     patientId: '',
     doctorId: '',
@@ -151,6 +156,102 @@ export default function AppointmentEditor({
     serviceSessionId: '',
     sessionNumber: undefined,
   });
+
+  useEffect(() => {
+    if (appointment && isOpen) {
+      console.log('Inicializando formulário com dados do appointment:', appointment);
+      
+      // Verificar se é um bloqueio de agenda
+      const isBlocked = appointment.patientId === '' || appointment.patientId === undefined;
+      setBlockSchedule(isBlocked);
+      
+      // Calcular duração a partir do horário de início e fim se disponível
+      let duration = appointment.duration || 30;
+      if (appointment.startTime && appointment.endTime) {
+        const [startHours, startMinutes] = appointment.startTime.split(':').map(Number);
+        const [endHours, endMinutes] = appointment.endTime.split(':').map(Number);
+        const startTotalMinutes = startHours * 60 + startMinutes;
+        const endTotalMinutes = endHours * 60 + endMinutes;
+        duration = endTotalMinutes - startTotalMinutes;
+      }
+      
+      // Preencher o formulário principal
+      setFormData({
+        patientId: appointment.patientId || '',
+        doctorId: appointment.doctorId || '',
+        date: appointment.date || new Date().toISOString().split('T')[0],
+        startTime: appointment.startTime ? appointment.startTime.substring(0, 5) : '',
+        endTime: appointment.endTime ? appointment.endTime.substring(0, 5) : '',
+        duration: duration,
+        procedure: appointment.procedure || '',
+        notes: appointment.notes || '',
+        unit: appointment.unit?.id || '',
+        attendanceType: appointment.attendanceType || '',
+        patientProtocolId: appointment.patientProtocol?.id || '',
+        serviceSessionId: appointment.serviceSession?.id || '',
+        sessionNumber: appointment.serviceSession?.sessionNumber,
+        isBlocked: isBlocked,
+        blockedByUserId: appointment.blockedByUserId || '',
+        blockedByUserName: appointment.blockedByUserName || '',
+      });
+      
+      // Preencher dados do paciente se disponível
+      if (appointment.patient) {
+        setPatientDetailsFormData({
+          name: appointment.patient.name || '',
+          email: appointment.patient.email || '',
+          phone: appointment.patient.phone || '',
+          birthDate: '',  // Preencher se disponível
+          cpf: '',        // Preencher se disponível
+          rg: '',         // Preencher se disponível
+        });
+      }
+      
+      // Definir outros estados relacionados
+      if (appointment.unit) {
+        setUnit(appointment.unit.id || '');
+      }
+      
+      // Definir tipo de atendimento
+      if (appointment.attendanceType) {
+        setSelectedScheduleType(appointment.attendanceType);
+      }
+      
+      // Se for um protocolo, definir o protocolo selecionado
+      if (appointment.patientProtocol) {
+        setSelectedProtocolId(appointment.patientProtocol.id || '');
+      }
+      
+      // Se tiver sessão de serviço, definir a sessão selecionada
+      if (appointment.serviceSession) {
+        setSelectedServiceSessionId(appointment.serviceSession.id || '');
+      }
+    } else if (isOpen && !appointment) {
+      setFormData({
+        patientId: '',
+        doctorId: '',
+        date: new Date().toISOString().split('T')[0],
+        startTime: '',
+        duration: 30,
+        procedure: '',
+        notes: '',
+        unit: '',
+        attendanceType: '',
+        patientProtocolId: '',
+        serviceSessionId: '',
+        sessionNumber: undefined,
+      });
+      setPatientDetailsFormData({
+        name: '',
+        email: '',
+        phone: '',
+        birthDate: '',
+        cpf: '',
+        rg: '',
+      });
+      setBlockSchedule(false);
+    }
+  }, [appointment, isOpen]);
 
   const [selectedTab, setSelectedTab] = useState("scheduling");
   const [patientDetailsFormData, setPatientDetailsFormData] = useState({
@@ -478,44 +579,40 @@ export default function AppointmentEditor({
         payload.observation = String(formData.observation);
       }
       
+      // Adicionar informações de bloqueio se for um bloqueio
+      if (blockSchedule) {
+        // Encontrar o usuário selecionado como profissional solicitante
+        const requestingUser = availableUsers.find(user => user.id === requestingProfessional);
+        
+        payload.blockedByUserId = requestingProfessional;
+        payload.blockedByUserName = requestingUser?.name || '';
+        payload.blockedUnitId = String(formData.unit);
+        payload.blockedStartTime = String(formData.startTime);
+        payload.blockedEndTime = endTime ? String(endTime) : '';
+      }
+      
       // Log para debug
       console.log('Payload enviado:', payload);
       
       if (typeof formData.patientProtocolId !== 'undefined' && formData.patientProtocolId !== '') {
         payload.patientProtocolId = String(formData.patientProtocolId);
       }
+      if (typeof formData.serviceSessionId !== 'undefined' && formData.serviceSessionId !== '') {
+        payload.serviceSessionId = String(formData.serviceSessionId);
+      } else if (formData.attendanceType === 'protocolo') {
+        toast({
+          title: 'Selecione uma sessão',
+          description: 'Para agendar um atendimento de protocolo, selecione uma sessão disponível.',
+          variant: 'destructive',
+        });
+        return;
+      }
       
-      // Criar o agendamento
       await attendanceScheduleApi.create(payload);
-      
       toast({
         title: "Agendamento criado com sucesso!",
         description: "O atendimento foi agendado.",
       });
-      
-      // Recarregar as sessões após criar o agendamento
-      if (formData.patientId) {
-        const [allProtocols, allSessions] = await Promise.all([
-          patientProtocolApi.list(),
-          patientServiceSessionApi.list()
-        ]);
-        
-        const filteredProtocols = allProtocols.filter(p => p.patientId === formData.patientId);
-        const enriched = await Promise.all(
-          filteredProtocols.map(async (p) => {
-            if (!p.protocolId) return p;
-            try {
-              const protocolDetails = await protocolApi.getById(p.protocolId);
-              return { ...p, protocol: protocolDetails };
-            } catch (e) {
-              return p;
-            }
-          })
-        );
-        setPatientProtocols(enriched);
-        setServiceSessions(allSessions);
-      }
-      
       onClose();
     } catch (error) {
       toast({
@@ -541,7 +638,7 @@ export default function AppointmentEditor({
     if (!protocol || !protocol.protocol?.services) return [];
     const sessions = protocol.protocol.services.flatMap(service => {
       const total = typeof service.numberOfSessions === 'string' ? Number(service.numberOfSessions) : service.numberOfSessions || 0;
-      const used = getSessionsForProtocol(protocolId).filter(s => s.protocolServiceId === String(service.id) && (s.status === 'completed' || s.status === 'scheduled')).length;
+      const used = getSessionsForProtocol(protocolId).filter(s => s.protocolServiceId === String(service.id) && s.status === 'completed').length;
       let serviceName: string = '';
       if ('name' in service && typeof service.name === 'string') serviceName = service.name;
       else if ('service' in service && service.service && typeof service.service.name === 'string') serviceName = service.service.name;
@@ -619,42 +716,18 @@ export default function AppointmentEditor({
 
   // Função para marcar/agendar sessão
   async function handleMarkSession(protocol, ps, sessionNumber) {
-    try {
-      // Primeiro, encontre a sessão correta com base no protocolo, serviço e número da sessão
-      const sessionForService = serviceSessions.find(
-        s => String(s.patientProtocolId) === String(protocol.id) && 
-             String(s.protocolServiceId) === String(ps.id) && 
-             Number(s.sessionNumber) === Number(sessionNumber)
-      );
-
-      if (!sessionForService) {
-        toast({ title: 'Erro ao selecionar sessão', description: 'Sessão não encontrada', variant: 'destructive' });
-        return;
-      }
-
-      // Apenas seleciona a sessão e atualiza o formData
-      setSelectedSession({
-        protocolId: protocol.id,
-        serviceId: ps.id,
-        sessionNumber: Number(sessionNumber)
-      });
-      
-      // Atualiza o formData com os dados da sessão selecionada
-      setFormData(prev => ({
-        ...prev,
-        patientProtocolId: protocol.id,
-        serviceSessionId: sessionForService.id,
-        sessionNumber: Number(sessionNumber),
-        attendanceType: 'protocolo'
-      }));
-      
-      // Muda para a aba de agendamento para que o usuário possa preencher os outros dados
-      setSelectedTab("scheduling");
-      
-      toast({ title: 'Sessão selecionada', description: 'Preencha os dados restantes para agendar', variant: 'default' });
-    } catch (error) {
-      toast({ title: 'Erro ao selecionar sessão', description: error?.message || JSON.stringify(error), variant: 'destructive' });
-    }
+    setSelectedSession({
+      protocolId: protocol.id,
+      serviceId: ps.id,
+      sessionNumber,
+    });
+    setFormData(prev => ({
+      ...prev,
+      patientProtocolId: protocol.id,
+      serviceSessionId: `${ps.id}-${sessionNumber}`,
+      sessionNumber,
+    }));
+    setSelectedTab('scheduling');
   }
 
   // Função para buscar próximo horário disponível (simulação)
@@ -679,7 +752,7 @@ export default function AppointmentEditor({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-screen h-screen max-w-none max-h-none rounded-none flex flex-col">
+      <DialogContent className="max-w-5xl h-[90vh] p-0 flex flex-col">
         {/* Header fixo */}
         <DialogHeader>
           <DialogTitle asChild>
@@ -1100,7 +1173,7 @@ export default function AppointmentEditor({
                                 <div className="space-y-3">
                                 {(protocol.protocol?.protocolServices || []).map(ps => {
                                   const total = Number(ps.numberOfSessions) || 0;
-                                  const used = getSessionsForProtocol(protocol.id).filter(s => s.protocolServiceId === String(ps.serviceId) && (s.status === 'completed' || s.status === 'scheduled')).length;
+                                  const used = getSessionsForProtocol(protocol.id).filter(s => s.protocolServiceId === String(ps.serviceId) && s.status === 'completed').length;
                                   return (
                                       <div key={ps.id} className="flex flex-col gap-0.5">
                                         <div className="flex items-center justify-between">

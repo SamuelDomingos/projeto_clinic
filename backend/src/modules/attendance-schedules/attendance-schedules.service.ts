@@ -20,27 +20,23 @@ export class AttendanceSchedulesService {
     let patientProtocolId: string | undefined;
     let protocolServiceId: string | undefined;
     let sessionNumber: number | undefined;
-    let userId: string | undefined;
+    let professionalId: string | undefined;
     let unitId: string | undefined;
     let patientId: string | undefined;
 
-<<<<<<< HEAD
-    // Se não foi fornecido professionalId mas foi fornecido userId, use userId como professionalId
-    if (!data.professionalId && data.user) {
-      if (typeof data.user === 'string') {
-        data.professionalId = data.user;
-      } else if (typeof data.user === 'object' && data.user && 'id' in data.user) {
-        data.professionalId = (data.user as { id: string }).id;
-      }
+    // Extrair professionalId
+    if (typeof (data as Record<string, unknown>)?.professionalId === 'string') {
+      professionalId = (data as Record<string, string>).professionalId;
+    } else if (typeof (data as Record<string, unknown>)?.userId === 'string') {
+      professionalId = (data as Record<string, string>).userId;
+    } else if (typeof data.professional === 'string') {
+      professionalId = data.professional;
+    } else if (typeof data.professional === 'object' && data.professional && 'id' in data.professional) {
+      professionalId = (data.professional as { id: string }).id;
     }
 
-    if (
-      typeof (data as Record<string, unknown>)?.patientProtocolId === 'string'
-    ) {
-=======
     // Extrair patientProtocolId
     if (typeof (data as Record<string, unknown>)?.patientProtocolId === 'string') {
->>>>>>> e2b5b03263b4508b7743cd0ec4ab30ccef37e650
       patientProtocolId = (data as Record<string, string>).patientProtocolId;
     } else if (typeof data.patientProtocol === 'string') {
       patientProtocolId = data.patientProtocol;
@@ -85,15 +81,6 @@ export class AttendanceSchedulesService {
       sessionNumber = Number((data as Record<string, unknown>).sessionNumber);
     }
 
-    // Extrair userId
-    if (typeof (data as Record<string, unknown>)?.userId === 'string') {
-      userId = (data as Record<string, string>).userId;
-    } else if (typeof data.user === 'string') {
-      userId = data.user;
-    } else if (typeof data.user === 'object' && data.user && 'id' in data.user) {
-      userId = (data.user as { id: string }).id;
-    }
-
     // Extrair unitId
     if (typeof (data as Record<string, unknown>)?.unitId === 'string') {
       unitId = (data as Record<string, string>).unitId;
@@ -112,82 +99,182 @@ export class AttendanceSchedulesService {
       patientId = (data.patient as { id: string }).id;
     }
 
-    // LOG: debug dos campos
-    console.log('DEBUG: attendanceType:', data.attendanceType);
-    console.log('DEBUG: patientProtocolId:', patientProtocolId);
-    console.log('DEBUG: protocolServiceId:', protocolServiceId);
-    console.log('DEBUG: sessionNumber:', sessionNumber);
-    console.log('DEBUG: userId:', userId);
-    console.log('DEBUG: unitId:', unitId);
-    console.log('DEBUG: patientId:', patientId);
-
     // Se for agendamento de protocolo, crie/atualize a sessão
     if (
       data.attendanceType === 'protocolo' &&
       !!patientProtocolId &&
       !!protocolServiceId &&
-      typeof sessionNumber !== 'undefined' &&
       patientProtocolId !== '' &&
       protocolServiceId !== ''
     ) {
-      // Verifica se já existe uma sessão para esse protocolo, serviço e número
-      let session = await this.patientServiceSessionRepository.findOne({
-        where: {
-          patientProtocolId,
-          protocolServiceId,
-          sessionNumber: Number(sessionNumber),
-        },
-      });
-      if (!session) {
-        // Cria nova sessão marcada como agendada
-        session = this.patientServiceSessionRepository.create({
-          patientProtocolId,
-          protocolServiceId,
-          sessionNumber: Number(sessionNumber),
-          status: 'scheduled',
+      let session;
+      
+      // Se serviceSessionId foi fornecido, buscar a sessão específica
+      if (typeof (data as Record<string, unknown>)?.serviceSessionId === 'string') {
+        const serviceSessionId = (data as Record<string, string>).serviceSessionId;
+        session = await this.patientServiceSessionRepository.findOne({
+          where: { id: serviceSessionId },
         });
-      } else {
-        // Se já existe, impede agendamento duplicado
+        
+        if (!session) {
+          throw new Error('Sessão não encontrada.');
+        }
+        
+        // Verificar se a sessão já foi realizada
         if (session.status === 'completed') {
           throw new Error('Esta sessão já foi realizada.');
         }
-        // Atualiza o status para 'completed' quando um agendamento é criado
-        session.status = 'completed';
+        
+        if (session.status === 'scheduled') {
+          throw new Error('Esta sessão já está agendada.');
+        }
+        
+        // Atualizar status para 'scheduled'
+        session.status = 'scheduled';
+        
+      } else {
+        // Lógica antiga para quando não há serviceSessionId específico
+        // Se sessionNumber não foi fornecido, calcular o próximo disponível
+        if (typeof sessionNumber === 'undefined' || sessionNumber === 0) {
+          const existingSessions = await this.patientServiceSessionRepository.find({
+            where: {
+              patientProtocolId,
+              protocolServiceId,
+            },
+            order: { sessionNumber: 'DESC' },
+          });
+          
+          sessionNumber = existingSessions.length > 0 ? existingSessions[0].sessionNumber + 1 : 1;
+        }
+        
+        // Verifica se já existe uma sessão para esse protocolo, serviço e número
+        session = await this.patientServiceSessionRepository.findOne({
+          where: {
+            patientProtocolId,
+            protocolServiceId,
+            sessionNumber: Number(sessionNumber),
+          },
+        });
+        
+        if (!session) {
+          // Criar nova sessão com status 'scheduled'
+          session = this.patientServiceSessionRepository.create({
+            patientProtocolId,
+            protocolServiceId,
+            sessionNumber: Number(sessionNumber),
+            status: 'scheduled',
+          });
+        } else {
+          // Se já existe, verificar o status
+          if (session.status === 'completed') {
+            throw new Error('Esta sessão já foi realizada.');
+          }
+          if (session.status === 'scheduled') {
+            throw new Error('Esta sessão já está agendada.');
+          }
+          // Atualizar para 'scheduled' se estava em outro status
+          session.status = 'scheduled';
+        }
       }
+      
       await this.patientServiceSessionRepository.save(session);
+    }
+    
+    // Se for agendamento de protocolo, criar sessão sequencial automaticamente
+    if (
+      data.attendanceType === 'protocolo' &&
+      !!patientProtocolId &&
+      patientProtocolId !== ''
+    ) {
+      // Buscar todas as sessões deste protocolo
+      const allSessions = await this.patientServiceSessionRepository.find({
+        where: {
+          patientProtocolId,
+        },
+        order: { sessionNumber: 'ASC' },
+      });
+      
+      // Encontrar a próxima sessão disponível (sessionNumber = 0)
+      const nextAvailableSession = allSessions.find(session => session.sessionNumber === 0);
+      
+      if (!nextAvailableSession) {
+        throw new Error('Não há mais sessões disponíveis para este protocolo.');
+      }
+      
+      // Calcular o próximo número sequencial
+      const usedSessions = allSessions.filter(session => session.sessionNumber > 0);
+      const nextSessionNumber = usedSessions.length + 1;
+      
+      // Atualizar a sessão com o número sequencial e status 'scheduled'
+      nextAvailableSession.sessionNumber = nextSessionNumber;
+      nextAvailableSession.status = 'scheduled';
+      
+      await this.patientServiceSessionRepository.save(nextAvailableSession);
+      
+      // Definir o serviceSessionId para o agendamento
+      (data as any).serviceSessionId = nextAvailableSession.id;
+      
+      console.log(`Sessão ${nextSessionNumber} agendada para protocolo ${patientProtocolId}`);
     }
     
     // Montar corretamente os relacionamentos para o AttendanceSchedule
     const attendance = this.attendanceScheduleRepository.create({
       ...data,
-<<<<<<< HEAD
-      patientProtocol: patientProtocolId
-        ? { id: patientProtocolId }
-        : undefined,
-      serviceSession: protocolServiceId ? { id: protocolServiceId } : undefined,
-      professional: data.professionalId ? { id: data.professionalId } : undefined,
-=======
-      patient: patientId ? { id: patientId } : undefined,
-      user: userId ? { id: userId } : undefined,
+      // Só definir patient se não for bloqueio e se patientId for válido
+      patient: (!data.isBlocked && patientId && patientId !== 'undefined') ? { id: patientId } : undefined,
       unit: unitId ? { id: unitId } : undefined,
       patientProtocol: patientProtocolId ? { id: patientProtocolId } : undefined,
       serviceSession: (data as Record<string, string>).serviceSessionId ? { id: (data as Record<string, string>).serviceSessionId } : undefined,
->>>>>>> e2b5b03263b4508b7743cd0ec4ab30ccef37e650
+      professional: professionalId ? { id: professionalId } : undefined,
     });
     
-    // LOG: objeto a ser salvo
-    console.log('Attendance a ser salvo:', attendance);
     const saved = await this.attendanceScheduleRepository.save(attendance);
-    // LOG: objeto salvo
-    console.log('Attendance salvo:', saved);
     return saved;
   }
 
   async findAll(): Promise<AttendanceSchedule[]> {
-    // Buscar com todos os relacionamentos relevantes
-    return this.attendanceScheduleRepository.find({
-      relations: ['patient', 'user', 'professional', 'unit', 'patientProtocol', 'serviceSession'],
+    // Buscar com relacionamentos selecionados e campos específicos
+    const schedules = await this.attendanceScheduleRepository.find({
+      relations: ['patient', 'professional', 'unit', 'patientProtocol', 'serviceSession'],
+      select: {
+        id: true,
+        date: true,
+        startTime: true,
+        endTime: true,
+        attendanceType: true,
+        observation: true,
+        isBlocked: true,
+        value: true,
+        patient: {
+          id: true,
+          name: true,
+          phone: true,
+          email: true
+        },
+        professional: {
+          id: true,
+          name: true,
+          email: true
+        },
+        unit: {
+          id: true,
+          name: true,
+          address: true
+        },
+        patientProtocol: {
+          id: true,
+          status: true
+        },
+        serviceSession: {
+          id: true,
+          sessionNumber: true,
+          status: true,
+          totalSessions: true
+        }
+      }
     });
+    
+    return schedules;
   }
 
   async findOne(id: string): Promise<AttendanceSchedule | null> {

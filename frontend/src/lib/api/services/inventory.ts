@@ -143,7 +143,7 @@ export const inventoryApi = {
       }
       throw new Error('Erro ao atualizar movimentação');
     }
-  }
+  },
   
   // Criar kit
   createKit: async (data: {

@@ -133,9 +133,6 @@ export function Scheduling() {
       .finally(() => setLoading(false));
   }, [currentDate, doctors]);
 
-  console.log('doctors:', doctors);
-  console.log('appointments:', appointments);
-
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'confirmed':

@@ -31,6 +31,12 @@ export interface AttendanceSchedule {
     name: string;
     email?: string;
   };
+  // Adicionar professional para compatibilidade com o backend
+  professional?: {
+    id: string;
+    name: string;
+    email?: string;
+  };
   unit?: {
     id: string;
     name: string;
@@ -42,6 +48,7 @@ export interface AttendanceSchedule {
   serviceSession?: {
     id: string;
     name: string;
+    sessionNumber?: number;
   };
   sessionNumber?: number;
 }
@@ -57,6 +64,7 @@ export interface CreateAttendanceScheduleData {
   value: number | null;
   patientProtocolId?: string | null;
   serviceSessionId?: string | null;
+  sessionNumber?: number; // Adicionar este campo
   observation?: string;
   isBlocked?: boolean;
   blockedByUserId?: string | null;
@@ -81,4 +89,4 @@ export interface UpdateAttendanceScheduleData {
   blockedUnitId?: string | null;
   blockedStartTime?: string | null;
   blockedEndTime?: string | null;
-} 
+}
