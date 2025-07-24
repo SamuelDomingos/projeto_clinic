@@ -2,8 +2,9 @@ import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 't
 import { User } from '../../users/entities/user.entity';
 import { PaymentMethod } from '../../payment-methods/entities/payment-method.entity';
 import { Category } from '../../categories/entities/category.entity';
+import { Supplier } from '../../suppliers/entities/supplier.entity';
 
-export type TransactionType = 'revenue' | 'expense' | 'invoice_payment'; // Adicionar invoice_payment aqui
+export type TransactionType = 'revenue' | 'expense' | 'invoice_payment';
 export type TransactionStatus = 'pending' | 'completed' | 'cancelled';
 
 @Entity('transactions')
@@ -11,7 +12,7 @@ export class Transaction {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'enum', enum: ['revenue', 'expense', 'invoice_payment'] }) // Atualizar enum
+  @Column({ type: 'enum', enum: ['revenue', 'expense', 'invoice_payment'] })
   type: TransactionType;
 
   @Column({ type: 'decimal', precision: 10, scale: 2 })
@@ -20,10 +21,6 @@ export class Transaction {
   @Column()
   description: string;
 
-  // Remover esta linha que está causando conflito
-  // @Column()
-  // category: string;
-
   @ManyToOne(() => PaymentMethod)
   paymentMethod: PaymentMethod;
 
@@ -31,11 +28,9 @@ export class Transaction {
   @JoinColumn({ name: 'category' })
   categoryData: Category;
 
-  // Adicionar referência para invoice (opcional)
   @Column({ nullable: true })
   invoiceId: string;
 
-  // Remover a linha duplicada de type que estava causando erro
   @Column({ type: 'timestamp' })
   dueDate: Date;
 
@@ -52,13 +47,35 @@ export class Transaction {
   reference: string;
 
   @Column({ type: 'varchar', nullable: true })
-  documentNumber: string | null; // Número do documento
+  documentNumber: string | null;
 
   @Column({ type: 'varchar', nullable: true })
-  boletoFile: string | null; // Caminho do arquivo do boleto (PDF/DOC)
+  boletoFile: string | null;
 
   @Column({ type: 'varchar', nullable: true })
-  boletoNumber: string | null; // Número do boleto, caso não tenha arquivo
+  boletoNumber: string | null;
+
+  // NOVOS CAMPOS ADICIONADOS:
+  
+  // Centro de custo (referência ao supplier com category "centerOfCustody")
+  @Column({ type: 'varchar', nullable: true })
+  costCenter: string | null;
+
+  @ManyToOne(() => Supplier, { nullable: true })
+  @JoinColumn({ name: 'costCenter' })
+  costCenterData: Supplier;
+
+  // Unidade (referência ao supplier com category "unidade")
+  @Column({ type: 'varchar', nullable: true })
+  unit: string | null;
+
+  @ManyToOne(() => Supplier, { nullable: true })
+  @JoinColumn({ name: 'unit' })
+  unitData: Supplier;
+
+  // Competência (mês/ano quando deve começar a ser pago/recebido)
+  @Column({ type: 'varchar', nullable: true })
+  competence: string | null; // Formato: "MM/YYYY"
 
   @Column({ nullable: true })
   createdBy: string | null;

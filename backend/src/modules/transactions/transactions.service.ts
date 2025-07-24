@@ -63,7 +63,7 @@ export class TransactionsService {
 
   async findAll(query: any = {}) {
     const transactions = await this.transactionRepository.find({
-      relations: ['creator', 'updater', 'paymentMethod', 'categoryData'],
+      relations: ['creator', 'updater', 'paymentMethod', 'categoryData', 'costCenterData', 'unitData'],
       order: { createdAt: 'DESC' }
     });
     // Filtrar dados sensíveis dos usuários
@@ -155,7 +155,7 @@ export class TransactionsService {
   async findOne(id: string) {
     const transaction = await this.transactionRepository.findOne({ 
       where: { id },
-      relations: ['creator', 'updater', 'paymentMethod', 'categoryData']
+      relations: ['creator', 'updater', 'paymentMethod', 'categoryData', 'costCenterData', 'unitData']
     });
     if (!transaction) throw new NotFoundException('Transaction not found');
     return transaction;
