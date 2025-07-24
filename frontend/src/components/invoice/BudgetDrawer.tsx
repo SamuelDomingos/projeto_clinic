@@ -35,15 +35,15 @@ function getServicePrice(ps: ProtocolService): number {
   if (ps.service && typeof ps.service === 'object' && 'price' in ps.service && typeof ps.service.price === 'number') {
     return ps.service.price;
   }
-  if (ps.Service && typeof ps.Service === 'object' && 'price' in ps.Service && typeof ps.Service.price === 'number') {
-    return ps.Service.price;
+  if (ps.service && typeof ps.service === 'object' && 'price' in ps.service && typeof ps.service.price === 'number') {
+    return ps.service.price;
   }
   return 0;
 }
 
 // Função para garantir que sempre pega os serviços do protocolo
 function getProtocolServices(protocol: Protocol): ProtocolService[] {
-  if (protocol.services && protocol.services.length > 0) return protocol.services;
+  if (protocol.protocolServices && protocol.protocolServices.length > 0) return protocol.protocolServices;
   if (protocol.protocolServices && protocol.protocolServices.length > 0) return protocol.protocolServices;
   return [];
 }
@@ -216,6 +216,7 @@ export function BudgetDrawer({ open, onOpenChange, protocols, loadingProtocols, 
   }, [paymentForm.paymentType, paymentForm.machineId, paymentMethods]);
 
   // Adicionar pagamento
+  // No handleAddPayment, após adicionar o pagamento localmente:
   const handleAddPayment = async () => {
     // Para cartão, exige maquineta e bandeira
     if (paymentForm.paymentType === 'credit_card') {
@@ -247,46 +248,32 @@ export function BudgetDrawer({ open, onOpenChange, protocols, loadingProtocols, 
     const newPayments = [...payments, newPayment];
     setPayments(newPayments);
 
-    // Se estiver editando um invoice existente, já salva no backend
+    // Se estiver editando um invoice existente, processar o pagamento
+    // No handleAddPayment, onde está chamando processPayment:
     if (invoiceToEdit) {
       try {
-        // Sempre envie items e campos obrigatórios
-        const items = selectedProtocolIds.map(pid => {
-          const protocol = protocols.find(p => p.id === pid);
-          return {
-            protocolId: pid,
-            quantity: protocolQuantities[pid] || 1,
-            price: protocol?.totalPrice || 0,
-          };
+        await invoiceApi.processPayment(invoiceToEdit.id, {
+          amount: Number(paymentForm.totalValue),
+          paymentMethodId: paymentForm.machineId || paymentForm.paymentMethodId || '',
+          paymentMethodName: paymentTypes.find(pt => pt.id === paymentForm.paymentType)?.name || '',
+          description: `Pagamento via ${paymentTypes.find(pt => pt.id === paymentForm.paymentType)?.name}`,
+          userId: 'temp-user-id', // TEMPORÁRIO - substitua pelo ID real do usuário
+          dueDate: new Date(paymentForm.dueDate),
+          installments: paymentForm.installments || 1,
+          cardBrand: paymentForm.cardBrand,
         });
-        const formattedPayments: InvoicePaymentInput[] = newPayments.map(p => {
-          const base = {
-            paymentMethodName: p.paymentMethodName || paymentTypes.find(pt => pt.id === p.paymentType)?.name,
-            dueDate: p.dueDate,
-            installments: p.installments || 1,
-            installmentValue: String(Number(p.totalValue) / (p.installments || 1)),
-            totalValue: String(p.totalValue),
-            cardBrand: p.cardBrand,
-            machineId: p.machineId,
-            description: `Pagamento via ${p.paymentMethodName || paymentTypes.find(pt => pt.id === p.paymentType)?.name}`,
-          };
-          if (p.paymentType === "credit_card" && p.machineId) {
-            return { ...base, paymentMethodId: p.machineId };
-          }
-          return base;
+        
+        toast({ 
+          title: "Pagamento processado!", 
+          description: "Pagamento confirmado e transação criada automaticamente." 
         });
-        await invoiceApi.update(invoiceToEdit.id, {
-          items,
-          payments: formattedPayments,
-          discount: Number(globalDiscount),
-          discountType: invoiceToEdit.discountType || "fixed",
-          status: status || invoiceToEdit.status,
-          performedBy: invoiceToEdit.performedBy,
-          notes,
-        });
-        toast({ title: "Pagamento salvo!", description: "Pagamento adicionado com sucesso." });
       } catch (error) {
-        toast({ title: "Erro", description: "Erro ao salvar pagamento.", variant: "destructive" });
+        console.error('Erro ao processar pagamento:', error);
+        toast({ 
+          title: "Erro", 
+          description: `Erro ao processar pagamento: ${error.message}`, 
+          variant: "destructive" 
+        });
       }
     }
 
@@ -344,11 +331,22 @@ export function BudgetDrawer({ open, onOpenChange, protocols, loadingProtocols, 
           performedBy: invoiceToEdit.performedBy,
           notes,
         });
-        toast({ title: "Pagamento removido!", description: "Pagamento removido com sucesso." });
+        toast({ title: "Pagamento salvo!", description: "Pagamento adicionado com sucesso." });
       } catch (error) {
-        toast({ title: "Erro", description: "Erro ao remover pagamento.", variant: "destructive" });
+        toast({ title: "Erro", description: "Erro ao salvar pagamento.", variant: "destructive" });
       }
     }
+
+    setPaymentForm({
+      paymentMethodId: "",
+      paymentType: undefined,
+      dueDate: "",
+      installments: 1,
+      installmentValue: "",
+      totalValue: "",
+      machineId: "",
+      cardBrand: "",
+    });
   };
 
   const selectedProtocols = protocols.filter(p => selectedProtocolIds.includes(p.id));
@@ -939,5 +937,5 @@ export function BudgetDrawer({ open, onOpenChange, protocols, loadingProtocols, 
         </Tabs>
       </DialogContent>
     </Dialog>
-  );
-}
+  )
+};

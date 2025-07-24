@@ -48,9 +48,14 @@ export class TransactionsController {
   ) {
     const userId = req.user?.id;
     if (!userId) throw new BadRequestException('Usuário não autenticado.');
-    if (!file && !body.boletoNumber) {
-      throw new BadRequestException('É obrigatório enviar o arquivo do boleto ou o número do boleto.');
+    
+    // Validação condicional: apenas para despesas com boleto
+    if (body.type === 'expense' && body.paymentMethod === 'boleto') {
+      if (!file && !body.boletoNumber) {
+        throw new BadRequestException('Para despesas com boleto, é obrigatório enviar o arquivo do boleto ou o número do boleto.');
+      }
     }
+    
     const data = { ...body };
     if (file) {
       data.boletoFile = file.filename;
@@ -101,4 +106,4 @@ export class TransactionsController {
   async remove(@Param('id') id: string) {
     return this.transactionsService.remove(id);
   }
-} 
+}

@@ -93,6 +93,27 @@ export const invoiceApi = {
       }
       throw new Error('Erro ao buscar faturas do paciente');
     }
+  },
+
+  processPayment: async (invoiceId: string, paymentData: {
+    amount: number;
+    paymentMethodId: string;
+    paymentMethodName: string;
+    description?: string;
+    userId: string;
+    dueDate: Date;
+    installments?: number;
+    cardBrand?: string;
+  }): Promise<any> => {
+    try {
+      const response = await api.post(`/invoices/${invoiceId}/payments`, paymentData);
+      return response.data;
+    } catch (error) {
+      if (isAxiosError(error) && error.response) {
+        throw new Error((error.response.data as ApiError).error);
+      }
+      throw new Error('Erro ao processar pagamento');
+    }
   }
 };
 
@@ -106,4 +127,4 @@ export async function calculateInvoice(data: InvoiceCalculationRequest): Promise
     }
     throw new Error('Erro ao calcular fatura');
   }
-} 
+}

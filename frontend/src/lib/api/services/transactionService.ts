@@ -27,9 +27,64 @@ export const transactionService = {
   },
 
   // Criar uma nova transação
-  create: async (transaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>): Promise<Transaction> => {
-    const response = await api.post('/transactions', transaction);
-    return response.data;
+  // Criar uma nova transação
+  create: async (transaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>, file?: File): Promise<Transaction> => {
+    console.log('=== TRANSACTION SERVICE CREATE ===');
+    console.log('Transaction data:', transaction);
+    console.log('File:', file);
+    
+    try {
+      // Se há arquivo, usar FormData
+      if (file) {
+        console.log('Enviando com FormData (arquivo presente)');
+        const formData = new FormData();
+        
+        // Adicionar todos os campos da transação
+        Object.entries(transaction).forEach(([key, value]) => {
+          if (value !== undefined && value !== null) {
+            console.log(`FormData append: ${key} = ${value}`);
+            formData.append(key, value.toString());
+          }
+        });
+        
+        // Adicionar o arquivo
+        formData.append('boletoFile', file);
+        console.log('Arquivo adicionado ao FormData:', file.name);
+        
+        console.log('Fazendo POST com FormData...');
+        const response = await api.post('/transactions', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+        console.log('Resposta do servidor (FormData):', response.data);
+        return response.data;
+      } else {
+        console.log('Enviando com JSON (sem arquivo)');
+        
+        // Para transações sem arquivo, usar JSON normal
+        const cleanTransaction = {
+          ...transaction,
+          paymentMethod: transaction.paymentMethod || null,
+          boletoNumber: transaction.boletoNumber || '' // Garantir que sempre tenha um valor
+        };
+        
+        console.log('Dados limpos para envio:', cleanTransaction);
+        console.log('Fazendo POST com JSON...');
+        
+        const response = await api.post('/transactions', cleanTransaction);
+        console.log('Resposta do servidor (JSON):', response.data);
+        return response.data;
+      }
+    } catch (error) {
+      console.error('=== ERRO NO TRANSACTION SERVICE ===');
+      console.error('Erro completo:', error);
+      console.error('Response data:', error.response?.data);
+      console.error('Response status:', error.response?.status);
+      console.error('Response headers:', error.response?.headers);
+      console.error('Request config:', error.config);
+      throw error;
+    }
   },
 
   // Criar múltiplas transações (bulk)
@@ -98,4 +153,4 @@ export const transactionService = {
       totalFees,
     };
   },
-}; 
+};

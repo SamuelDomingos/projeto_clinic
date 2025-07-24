@@ -53,4 +53,26 @@ export class InvoicesController {
   async findByPatient(@Param('patientId') patientId: string) {
     return this.invoicesService.findByPatient(patientId);
   }
-} 
+
+  @Post(':id/payments')
+  async processPayment(
+    @Param('id') invoiceId: string,
+    @Body() paymentData: {
+      amount: number;
+      paymentMethodId: string;
+      paymentMethodName: string;
+      description?: string;
+      userId: string;
+      dueDate: Date;
+      installments?: number;
+      cardBrand?: string;
+    }
+  ) {
+    return this.invoicesService.processInvoicePayment(invoiceId, paymentData);
+  }
+
+  @Get(':id/payment-status')
+  async getPaymentStatus(@Param('id') invoiceId: string) {
+    return this.invoicesService.getInvoicePaymentStatus(invoiceId);
+  }
+}

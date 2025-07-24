@@ -3,14 +3,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectLabel, SelectGroup } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { Transaction, TransactionType, TransactionStatus, PaymentMethod } from "@/lib/api/types/transaction";
-import { formatCurrency } from "@/lib/utils";
 import { useState, useEffect, useMemo } from "react";
-import { Switch } from "@/components/ui/switch";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { api } from "@/lib/api";
-import { supplierApi } from "@/lib/api/services/supplier";
 import { patientApi } from "@/lib/api/services/patient";
 import { userApi } from "@/lib/api/services/user";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -26,11 +21,23 @@ interface Supplier {
   status?: 'active' | 'inactive';
 }
 
+interface Patient {
+  id: string;
+  name: string;
+  email?: string;
+}
+
+interface User {
+  id: string;
+  name: string;
+  email?: string;
+}
+
 interface TransactionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   transaction?: Transaction;
-  onSubmit: (transaction: Partial<Transaction> & { costCenter?: string }) => void;
+  onSubmit: (transaction: Partial<Transaction> & { costCenter?: string; competence?: string; unit?: string }, file?: File) => void;
   categories: { id: string; name: string; type: TransactionType }[];
 }
 
@@ -60,23 +67,26 @@ export function TransactionDialog({
   const [costCenters, setCostCenters] = useState<Supplier[]>([]);
   const [costCenter, setCostCenter] = useState("");
   const [boletoFile, setBoletoFile] = useState<File | null>(null);
-  const [patients, setPatients] = useState<any[]>([]);
-  const [users, setUsers] = useState<any[]>([]);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [competence, setCompetence] = useState("");
+  const [unit, setUnit] = useState(""); // Adicionar esta linha
 
   useEffect(() => {
     const fetchSuppliers = async () => {
       try {
         const response = await api.get<Supplier[]>("/suppliers");
+        // Corrigir o filtro para usar apenas category === "unidade"
         const unitSuppliers = response.data.filter(
           (supplier) =>
-            (supplier.type === "unidade" || supplier.category === "unidade") &&
+            supplier.category === "unidade" &&
             supplier.status === "active"
         );
         setSuppliers(unitSuppliers);
-        // Buscar centro de custo
+        
+        // Corrigir o filtro do centro de custo para usar "centerOfCustody"
         const costCenterSuppliers = response.data.filter(
-          (supplier) => supplier.category === "centro de custo" && supplier.status === "active"
+          (supplier) => supplier.category === "centerOfCustody" && supplier.status === "active"
         );
         setCostCenters(costCenterSuppliers);
       } catch (error) {
@@ -104,6 +114,7 @@ export function TransactionDialog({
         branch: transaction.branch || "",
       });
       setCostCenter((transaction as { costCenter?: string }).costCenter || "");
+      setUnit((transaction as { unit?: string }).unit || "");
       // Inicializa competência com o mês/ano do dueDate da transação
       if (transaction.dueDate) {
         setCompetence(`${String(new Date(transaction.dueDate).getMonth() + 1).padStart(2, '0')}/${new Date(transaction.dueDate).getFullYear()}`);
@@ -131,11 +142,10 @@ export function TransactionDialog({
         description: "",
         category: "",
         notes: "",
-        branch: "",
+        branch: "", // Adicione esta linha se não estiver presente
       });
       setCostCenter("");
-      // Inicializa competência com o mês/ano do dueDate padrão
-      setCompetence(`${String(new Date().getMonth() + 1).padStart(2, '0')}/${new Date().getFullYear()}`);
+      setCompetence("");
       setRecurrenceType('none');
       setInstallments(1);
     }
@@ -210,7 +220,18 @@ export function TransactionDialog({
       // Fechar o diálogo após criar todas as parcelas
       onOpenChange(false);
     } else {
-      onSubmit({ ...formData, costCenter, competence });
+      // Passar o arquivo boletoFile junto com os dados
+      console.log('=== TRANSACTION DIALOG SUBMIT ===');
+      console.log('formData:', formData);
+      console.log('costCenter:', costCenter);
+      console.log('competence:', competence);
+      console.log('unit:', unit);
+      console.log('boletoFile:', boletoFile);
+      
+      const dataToSubmit = { ...formData, costCenter, competence, unit };
+      console.log('Dados completos para envio:', dataToSubmit);
+      
+      onSubmit(dataToSubmit, boletoFile);
       onOpenChange(false);
     }
   };
@@ -278,7 +299,12 @@ export function TransactionDialog({
               <Label htmlFor="branch">{formData.type === "revenue" ? "Recebido de" : "Pago a"}</Label>
               <Select
                 value={formData.branch}
-                onValueChange={(value) => handleChange("branch", value)}
+                onValueChange={(value) => {
+                  console.log('Selected value:', value);
+                  console.log('Current formData.branch:', formData.branch);
+                  console.log('Available suppliers:', suppliers.map(s => ({ id: s.id, name: s.name })));
+                  handleChange("branch", value);
+                }}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Selecione" />
@@ -391,8 +417,11 @@ export function TransactionDialog({
             <div className="space-y-2">
               <Label htmlFor="unit">Unidade</Label>
               <Select
-                value={formData.branch}
-                onValueChange={(value) => handleChange("branch", value)}
+                value={unit}
+                onValueChange={(value) => {
+                  console.log('Selected unit:', value);
+                  setUnit(value);
+                }}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Selecione" />
@@ -412,6 +441,7 @@ export function TransactionDialog({
             <div className="space-y-2">
               <Label htmlFor="costCenter">Centro de custo</Label>
               <Select
+                key={`costCenter-${costCenters.length}`} // Adicionar esta key
                 value={costCenter}
                 onValueChange={setCostCenter}
               >
@@ -494,4 +524,4 @@ export function TransactionDialog({
       </DialogContent>
     </Dialog>
   );
-} 
+}

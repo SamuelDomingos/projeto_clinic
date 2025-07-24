@@ -17,7 +17,7 @@ export class InvoicePayment {
   @JoinColumn({ name: 'invoiceId' })
   invoice: Invoice;
 
-  @Column({ nullable: true })
+  @Column({ nullable: true, default: null })
   paymentMethodId: string | null;
 
   @ManyToOne(() => PaymentMethod, { nullable: true })
@@ -54,4 +54,4 @@ export class InvoicePayment {
   // Observação:
   // - Para pagamentos em dinheiro, pix, etc: NÃO preencha paymentMethod nem cardBrand.
   // - Para pagamentos em cartão: preencha paymentMethod (maquineta), cardBrand (bandeira) e installments (parcelas).
-} 
+}

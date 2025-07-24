@@ -161,22 +161,46 @@ export default function Transactions() {
     }
   }, [loadSummary, transactions]);
 
-  const handleCreateTransaction = async (transaction: Partial<Transaction>) => {
+  const handleCreateTransaction = async (transaction: Partial<Transaction> & { costCenter?: string; competence?: string; unit?: string }, file?: File) => {
+    console.log('=== HANDLE CREATE TRANSACTION ===');
+    console.log('Transaction recebida:', transaction);
+    console.log('File recebido:', file);
+    
     try {
+      // Criar objeto limpo apenas com campos que o backend reconhece
       const newTransaction: Omit<Transaction, "id" | "createdAt" | "updatedAt"> = {
         type: transaction.type || "revenue",
         description: transaction.description || "",
         amount: transaction.amount || 0,
         dueDate: transaction.dueDate || new Date().toISOString(),
         category: transaction.category || "",
-        paymentMethod: transaction.paymentMethod || "cash",
+        paymentMethod: transaction.paymentMethod,
         notes: transaction.notes,
         status: transaction.status || "pending",
-        branch: transaction.branch
+        branch: transaction.branch,
+        documentNumber: transaction.documentNumber,
+        boletoNumber: transaction.boletoNumber || "", // Garantir que sempre tenha um valor
+        reference: transaction.reference,
+        installments: transaction.installments,
+        installmentNumber: transaction.installmentNumber
       };
-    
-      await transactionService.create(newTransaction);
       
+      console.log('newTransaction criada:', newTransaction);
+      
+      // Remover campos undefined para evitar problemas
+      Object.keys(newTransaction).forEach(key => {
+        if (newTransaction[key] === undefined) {
+          console.log(`Removendo campo undefined: ${key}`);
+          delete newTransaction[key];
+        }
+      });
+      
+      console.log('newTransaction após limpeza:', newTransaction);
+      console.log('Chamando transactionService.create...');
+    
+      await transactionService.create(newTransaction, file);
+      
+      console.log('Transação criada com sucesso!');
       toast({
         title: "Sucesso",
         description: "Transação criada com sucesso.",
@@ -185,7 +209,10 @@ export default function Transactions() {
       loadTransactions();
       loadSummary();
     } catch (error) {
+      console.error('=== ERRO EM HANDLE CREATE TRANSACTION ===');
       console.error("Erro ao criar transação:", error);
+      console.error('Error message:', error.message);
+      console.error('Error response:', error.response);
       toast({
         title: "Erro",
         description: "Não foi possível criar a transação",

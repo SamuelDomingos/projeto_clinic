@@ -10,16 +10,23 @@ export class TransactionsService {
     private readonly transactionRepository: Repository<Transaction>,
   ) {}
 
-  async create(data: any, userId: string) {
-    if (!userId) {
-      throw new Error('userId é obrigatório para criar transação');
+  async create(data: any, userId?: string): Promise<Transaction> {
+    // Validação apenas para despesas com boleto
+    if (data.type === 'expense' && data.paymentMethod === 'boleto') {
+      if (!data.boletoFile && !data.boletoNumber) {
+        throw new Error('Para despesas com boleto, o arquivo do boleto ou número do boleto é obrigatório.');
+      }
     }
-    // Garantir que pelo menos um dos campos de boleto esteja presente
-    if (!data.boletoFile && !data.boletoNumber) {
-      throw new Error('É obrigatório enviar o arquivo do boleto ou o número do boleto.');
-    }
-    const transaction = this.transactionRepository.create({ ...data, createdBy: userId, updatedBy: userId });
-    return this.transactionRepository.save(transaction);
+
+    const transaction = this.transactionRepository.create({
+      ...data,
+      // Só define createdBy/updatedBy se userId for válido
+      createdBy: userId && userId !== 'temp-user-id' ? userId : null,
+      updatedBy: userId && userId !== 'temp-user-id' ? userId : null,
+    });
+
+    const savedTransaction = await this.transactionRepository.save(transaction);
+    return Array.isArray(savedTransaction) ? savedTransaction[0] : savedTransaction;
   }
 
   async createBulk(transactions: any[], userId: string) {

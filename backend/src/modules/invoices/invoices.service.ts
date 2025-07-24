@@ -196,7 +196,7 @@ export class InvoicesService {
       if (!invoice) throw new NotFoundException('Invoice not found');
       if (data.type === 'invoice' && invoice.type !== 'invoice') {
         await manager.update(Invoice, id, { type: 'invoice' });
-        invoice.type = 'invoice'; // Atualiza o objeto em memória também
+        invoice.type = 'invoice';
       }
       const subtotal = items.reduce((sum, item) => sum + (Number(item.price) * Number(item.quantity)), 0);
       const discountValue = discountType === 'percentage' ? (subtotal * discount / 100) : discount;
@@ -226,194 +226,53 @@ export class InvoicesService {
       await manager.delete(InvoicePayment, { invoice: { id } });
       if (Array.isArray(payments) && payments.length > 0) {
         for (const payment of payments) {
-          // Permitir pagamentos avulsos (dinheiro, pix, etc.) sem paymentMethod
-          // Para cartão, preencher paymentMethod, cardBrand e installments
-          const invoicePayment = new InvoicePayment();
-          invoicePayment.paymentMethodId = payment.paymentMethodId && payment.paymentMethodId.trim() ? payment.paymentMethodId.trim() : null;
-          invoicePayment.paymentMethodName = payment.paymentMethodName || '';
-          invoicePayment.dueDate = payment.dueDate;
-          invoicePayment.controlNumber = payment.controlNumber || '';
-          invoicePayment.description = payment.description || '';
-          invoicePayment.installments = payment.installments || 1;
-          invoicePayment.installmentValue = payment.installmentValue ? Number(payment.installmentValue).toFixed(2) : '0.00';
-          invoicePayment.totalValue = payment.totalValue ? Number(payment.totalValue).toFixed(2) : '0.00';
-          invoicePayment.cardBrand = payment.cardBrand || null;
-          invoicePayment.invoice = invoice;
+          const paymentMethodId = payment.paymentMethodId && payment.paymentMethodId.trim() 
+            ? payment.paymentMethodId 
+            : null;
+          
+          const invoicePayment = manager.create(InvoicePayment, {
+            invoice: invoice,
+            paymentMethodId: payment.paymentMethodId,
+            paymentMethodName: payment.paymentMethodName,
+            dueDate: payment.dueDate,
+            description: payment.description,
+            installments: payment.installments || 1,
+            installmentValue: payment.amount.toFixed(2),
+            totalValue: payment.amount.toFixed(2),
+            cardBrand: payment.cardBrand
+          });
+          
           await manager.save(invoicePayment);
-        }
-        const totalPayments = payments.reduce((sum, payment) => sum + Number(payment.totalValue), 0);
-        if (totalPayments >= total) {
-          await manager.update(Invoice, id, { status: 'paid' });
-          // Sincronizar protocolos adquiridos
-          for (const item of items) {
-            let patientProtocol = await manager.getRepository('PatientProtocol').findOne({
-              where: { patientId: invoice.patientId, protocolId: item.protocolId }
-            });
-            if (!patientProtocol) {
-              patientProtocol = await manager.getRepository('PatientProtocol').save({
-                patientId: invoice.patientId,
-                protocolId: item.protocolId,
-                purchaseDate: new Date(),
-                status: 'active',
-              });
-              // Cria as sessões para o novo PatientProtocol usando o mesmo manager
-              const protocol = await manager.getRepository('Protocol').findOne({
-                where: { id: patientProtocol.protocolId },
-                relations: ['protocolServices'],
-              });
-              console.log('[INVOICE] protocol.protocolServices:', protocol?.protocolServices);
-              if (protocol && protocol.protocolServices && protocol.protocolServices.length > 0) {
-                for (const protocolService of protocol.protocolServices) {
-                  for (let i = 1; i <= protocolService.numberOfSessions; i++) {
-                    await manager.getRepository('PatientServiceSession').save({
-                      patientProtocolId: patientProtocol.id,
-                      protocolServiceId: protocolService.id,
-                      sessionNumber: i,
-                      status: 'scheduled',
-                    });
-                    console.log('[INVOICE] Sessão criada:', { patientProtocolId: patientProtocol.id, protocolServiceId: protocolService.id, sessionNumber: i });
-                  }
-                }
-              } else {
-                console.log('[INVOICE] Protocolo ou serviços não encontrados ao criar PatientProtocol!');
-              }
-            }
-          }
-        } else if (totalPayments > 0) {
-          // Sincronizar protocolos adquiridos para qualquer pagamento parcial ou total
-          for (const item of items) {
-            let patientProtocol = await manager.getRepository('PatientProtocol').findOne({
-              where: { patientId: invoice.patientId, protocolId: item.protocolId }
-            });
-            if (!patientProtocol) {
-              patientProtocol = await manager.getRepository('PatientProtocol').save({
-                patientId: invoice.patientId,
-                protocolId: item.protocolId,
-                purchaseDate: new Date(),
-                status: 'active',
-              });
-              // Cria as sessões para o novo PatientProtocol
-              await this.patientProtocolsService.createSessionsForPatientProtocol(patientProtocol.id);
-            }
-          }
+          
+          // CRIAR A TRANSAÇÃO AUTOMATICAMENTE!
+          const transactionData = {
+            type: 'revenue',
+            amount: payment.amount,
+            description: payment.description || `Pagamento da Fatura ${invoice.number}`,
+            category: '',
+            paymentMethod: payment.paymentMethodName,
+            dueDate: payment.dueDate,
+            status: 'completed',
+            invoiceId: invoice.id,
+            boletoNumber: `PAY-${invoice.number}-${Date.now()}`,
+            createdBy: payment.userId,
+            updatedBy: payment.userId
+          };
+          
+          // Criar a transação usando o TransactionsService
+          await this.transactionsService.create(transactionData, payment.userId);
         }
       }
-      return this.findOne(id);
-    });
-  }
-
-  async convertToInvoice(id: string) {
-    return this.dataSource.transaction(async manager => {
-      const invoice = await manager.findOne(Invoice, { where: { id } });
-      if (!invoice) throw new NotFoundException('Invoice not found');
-      if (invoice.type !== 'budget') throw new BadRequestException('Only budgets can be converted to invoices');
-      const newNumber = await this.generateInvoiceNumber('invoice');
-      await manager.update(Invoice, id, { type: 'invoice', status: 'invoiced', number: newNumber });
-      return this.findOne(id);
-    });
-  }
-
-  async remove(id: string) {
-    return this.dataSource.transaction(async manager => {
-      const invoice = await manager.findOne(Invoice, { where: { id } });
-      if (!invoice) throw new NotFoundException('Invoice not found');
-      await manager.delete(InvoiceItem, { invoiceId: id });
-      await manager.delete(InvoicePayment, { invoice: { id } });
-      await manager.delete(Invoice, { id });
-      return { success: true };
-    });
-  }
-
-  async calculateInvoice(data: any) {
-    const { items, discount, discountType, payments } = data;
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      throw new Error('Itens obrigatórios para cálculo');
-    }
-    // Buscar protocolos e validar/preencher preço correto
-    const protocolIds = items.map((item: any) => item.protocolId);
-    const protocols = await this.dataSource.getRepository('Protocol').findByIds(protocolIds);
-    const protocolMap = new Map(protocols.map((p: any) => [p.id, p]));
-    let subtotal = 0;
-    const validatedItems = items.map((item: any) => {
-      const protocol = protocolMap.get(item.protocolId);
-      if (!protocol) throw new Error(`Protocolo não encontrado: ${item.protocolId}`);
-      const price = protocol.price ? Number(protocol.price) : Number(item.price);
-      const quantity = Number(item.quantity);
-      const total = price * quantity;
-      subtotal += total;
-      return { ...item, price, total };
-    });
-    let discountValue = 0;
-    if (discountType === 'percentage') {
-      discountValue = subtotal * (Number(discount) / 100);
-    } else {
-      discountValue = Number(discount);
-    }
-    const total = subtotal - discountValue;
-    let totalReceived = 0;
-    if (payments && Array.isArray(payments)) {
-      totalReceived = payments.reduce((sum: number, p: any) => sum + Number(p.totalValue || 0), 0);
-    }
-    let paymentStatus: 'paid' | 'pending' | 'partial' = 'pending';
-    if (totalReceived >= total) paymentStatus = 'paid';
-    else if (totalReceived > 0) paymentStatus = 'partial';
-    return {
-      subtotal: Number(subtotal.toFixed(2)),
-      discount: Number(discountValue.toFixed(2)),
-      discountType,
-      total: Number(total.toFixed(2)),
-      totalReceived: Number(totalReceived.toFixed(2)),
-      paymentStatus,
-    };
-  }
-
-  // Método para processar pagamento (sem transaction por enquanto)
-  async processInvoicePayment(invoiceId: string, paymentData: {
-    amount: number;
-    paymentMethodId: string;
-    paymentMethodName: string;
-    description?: string;
-    userId: string;
-    dueDate: Date;
-    installments?: number;
-    cardBrand?: string;
-  }) {
-    return this.dataSource.transaction(async (manager) => {
-      const invoice = await manager.findOne(Invoice, {
-        where: { id: invoiceId },
-        relations: ['payments']
+      
+      // Retornar a fatura atualizada
+      return await manager.findOne(Invoice, {
+        where: { id },
+        relations: ['patient', 'protocol', 'items', 'items.protocol', 'payments', 'payments.paymentMethod']
       });
-      
-      if (!invoice) {
-        throw new NotFoundException('Fatura não encontrada');
-      }
-      
-      // Criar o InvoicePayment (como já funciona)
-      const invoicePayment = manager.create(InvoicePayment, {
-        invoice: invoice,
-        paymentMethodId: paymentData.paymentMethodId,
-        paymentMethodName: paymentData.paymentMethodName,
-        dueDate: paymentData.dueDate,
-        description: paymentData.description,
-        installments: paymentData.installments || 1,
-        installmentValue: paymentData.amount.toFixed(2),
-        totalValue: paymentData.amount.toFixed(2),
-        cardBrand: paymentData.cardBrand
-      });
-      
-      await manager.save(invoicePayment);
-      
-      // Calcular status da fatura
-      const updatedInvoice = await this.getInvoicePaymentStatus(invoiceId);
-      
-      return {
-        invoicePayment,
-        invoiceStatus: updatedInvoice
-      };
     });
   }
 
-  // Método simplificado para verificar status de pagamento
+  // Método simplificado para verificar status de pagamento (agora fora do método update)
   async getInvoicePaymentStatus(invoiceId: string) {
     const invoice = await this.invoiceRepository.findOne({
       where: { id: invoiceId },
@@ -462,5 +321,147 @@ export class InvoicesService {
         numberOfPayments: invoice.payments.length
       }
     };
+  }
+
+  async calculateInvoice(data: any) {
+    const { items, discount = 0, discountType = 'fixed', payments = [] } = data;
+    
+    // Calcular subtotal dos itens
+    let subtotal = 0;
+    for (const item of items) {
+      subtotal += item.quantity * item.price;
+    }
+    
+    // Calcular desconto
+    let discountAmount = 0;
+    if (discountType === 'percentage') {
+      discountAmount = (subtotal * discount) / 100;
+    } else {
+      discountAmount = discount;
+    }
+    
+    const total = subtotal - discountAmount;
+    
+    // Calcular total recebido dos pagamentos
+    const totalReceived = payments.reduce((sum: number, payment: any) => {
+      return sum + (payment.totalValue || 0);
+    }, 0);
+    
+    // Determinar status do pagamento
+    let paymentStatus = 'pending';
+    if (totalReceived >= total) {
+      paymentStatus = 'paid';
+    } else if (totalReceived > 0) {
+      paymentStatus = 'partial';
+    }
+    
+    return {
+      subtotal,
+      discount: discountAmount,
+      discountType,
+      total,
+      totalReceived,
+      paymentStatus
+    };
+  }
+
+  async processInvoicePayment(invoiceId: string, paymentData: any) {
+    const invoice = await this.invoiceRepository.findOne({
+      where: { id: invoiceId },
+      relations: ['payments']
+    });
+    
+    if (!invoice) {
+      throw new NotFoundException('Fatura não encontrada');
+    }
+    
+    // Converter paymentMethodId vazio para null
+    const processedPaymentData = {
+      ...paymentData,
+      paymentMethodId: paymentData.paymentMethodId === '' ? null : paymentData.paymentMethodId
+    };
+    
+    const payment = this.invoicePaymentRepository.create({
+      invoice: { id: invoiceId },
+      ...processedPaymentData,
+      totalValue: paymentData.amount,
+      installmentValue: paymentData.amount / (paymentData.installments || 1)
+    });
+    
+    const savedPayment = await this.invoicePaymentRepository.save(payment);
+    
+    // Criar transação correspondente
+    try {
+      await this.transactionsService.create({
+        type: 'revenue',
+        amount: paymentData.amount,
+        description: paymentData.description || `Pagamento da fatura ${invoice.number} via ${paymentData.paymentMethodName || 'método não especificado'}`,
+        paymentMethodId: processedPaymentData.paymentMethodId
+      }, paymentData.userId || null);
+    } catch (error) {
+      console.error('Erro ao criar transação:', error);
+      // Não falhar o pagamento se a transação falhar
+    }
+    
+    return savedPayment;
+  }
+
+  async remove(id: string) {
+    return this.dataSource.transaction(async manager => {
+      const invoice = await manager.findOne(Invoice, { 
+        where: { id },
+        relations: ['items', 'payments']
+      });
+      
+      if (!invoice) {
+        throw new NotFoundException('Fatura não encontrada');
+      }
+      
+      // Deletar itens relacionados
+      await manager.delete(InvoiceItem, { invoiceId: id });
+      
+      // Deletar pagamentos relacionados
+      await manager.delete(InvoicePayment, { invoice: { id } });
+      
+      // Deletar a fatura
+      await manager.delete(Invoice, { id });
+      
+      return { message: 'Fatura deletada com sucesso' };
+    });
+  }
+  
+  async convertToInvoice(id: string) {
+    return this.dataSource.transaction(async manager => {
+      const budget = await manager.findOne(Invoice, {
+        where: { id, type: 'budget' },
+        relations: ['items', 'payments']
+      });
+      
+      if (!budget) {
+        throw new NotFoundException('Orçamento não encontrado');
+      }
+      
+      if (budget.type !== 'budget') {
+        throw new BadRequestException('Este item já é uma fatura');
+      }
+      
+      // Gerar novo número de fatura
+      const invoiceNumber = await this.generateInvoiceNumber('invoice');
+      
+      // Atualizar o tipo e número
+      await manager.update(Invoice, id, {
+        type: 'invoice',
+        number: invoiceNumber,
+        status: 'pending'
+      });
+      
+      // Buscar a fatura atualizada
+      const updatedInvoice = await manager.findOne(Invoice, {
+        where: { id },
+        relations: ['patient', 'protocol', 'items', 'items.protocol', 'payments', 'payments.paymentMethod']
+      });
+      
+      return updatedInvoice;
+    });
   }
 }

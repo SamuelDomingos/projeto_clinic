@@ -20,8 +20,9 @@ export class Transaction {
   @Column()
   description: string;
 
-  @Column()
-  category: string;
+  // Remover esta linha que está causando conflito
+  // @Column()
+  // category: string;
 
   @ManyToOne(() => PaymentMethod)
   paymentMethod: PaymentMethod;
@@ -59,15 +60,15 @@ export class Transaction {
   @Column({ type: 'varchar', nullable: true })
   boletoNumber: string | null; // Número do boleto, caso não tenha arquivo
 
-  @Column()
-  createdBy: string;
+  @Column({ nullable: true })
+  createdBy: string | null;
 
   @ManyToOne(() => User)
   @JoinColumn({ name: 'createdBy' })
   creator: User;
 
-  @Column()
-  updatedBy: string;
+  @Column({ nullable: true })
+  updatedBy: string | null;
 
   @ManyToOne(() => User)
   @JoinColumn({ name: 'updatedBy' })
