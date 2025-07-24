@@ -167,4 +167,43 @@ export class TransactionsService {
     await this.transactionRepository.remove(transaction);
     return { success: true };
   }
-} 
+
+  async findByInvoice(invoiceId: string) {
+    const transactions = await this.transactionRepository.find({
+      where: { invoiceId },
+      relations: ['paymentMethod', 'invoice'],
+      order: { createdAt: 'DESC' }
+    });
+    
+    const totalPaid = transactions.reduce((sum, transaction) => {
+      return sum + parseFloat(transaction.amount);
+    }, 0);
+    
+    return {
+      transactions,
+      summary: {
+        totalPaid,
+        numberOfTransactions: transactions.length
+      }
+    };
+  }
+
+  async getFinancialSummaryByInvoices(query: any = {}) {
+    const { startDate, endDate } = query;
+    
+    // Receitas de faturas
+    const invoiceRevenue = await this.transactionRepository
+      .createQueryBuilder('transaction')
+      .select('SUM(CAST(transaction.amount AS DECIMAL(10,2)))', 'total')
+      .where('transaction.type = :type', { type: 'invoice_payment' })
+      .andWhere('transaction.status = :status', { status: 'completed' })
+      .andWhere(startDate && endDate ? 'transaction.dueDate BETWEEN :startDate AND :endDate' : '1=1', 
+        startDate && endDate ? { startDate: new Date(startDate), endDate: new Date(endDate) } : {})
+      .getRawOne();
+    
+    return {
+      invoiceRevenue: parseFloat(invoiceRevenue?.total || '0'),
+      // ... outros cálculos ...
+    };
+  }
+}

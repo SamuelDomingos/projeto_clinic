@@ -134,10 +134,7 @@ export default function ScheduleView({
 }: ScheduleViewProps) {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const { config } = useScheduleConfig(); // Obter a configuração
-
-  console.log(schedules);
-  
-  
+   
   // Detectar modo escuro
   useEffect(() => {
     const checkDarkMode = () => {
@@ -298,79 +295,131 @@ export default function ScheduleView({
           
           {/* Container dos agendamentos */}
           <div className="relative h-full">
-            {weekSchedules.map((appointment) => {
-              // Usar o blockInterval da configuração
-              const blockInterval = config?.blockInterval || 30;
-              const position = calculateAppointmentPosition(appointment, hours, weekDays, startOfGridWeek, blockInterval);
+            {(() => {
+              // Separar bloqueios e agendamentos
+              const blockedAppointments = weekSchedules.filter(appointment => appointment.isBlocked);
+              const regularAppointments = weekSchedules.filter(appointment => !appointment.isBlocked);
               
-              if (!position) return null;
+              // Ordenar cada categoria por horário (startTime)
+              const sortByTime = (a: AttendanceSchedule, b: AttendanceSchedule) => {
+                const timeA = timeToMinutes(a.startTime || '00:00');
+                const timeB = timeToMinutes(b.startTime || '00:00');
+                return timeA - timeB;
+              };
               
-              const doctorName = appointment.professional?.name || 'Profissional';
-              const patientName = appointment.patient?.name || 'Paciente';
-              const isProtocol = appointment.attendanceType === 'protocolo';
-              const isBlocked = appointment.isBlocked;
+              const sortedBlocked = blockedAppointments.sort(sortByTime);
+              const sortedRegular = regularAppointments.sort(sortByTime);
               
-              return (
-                <div
-                  key={appointment.id}
-                  className="absolute pointer-events-auto cursor-pointer hover:shadow-lg transition-all duration-200 border group overflow-hidden rounded-md z-30"
-                  style={{
-                    backgroundColor: isBlocked
-                      ? themeColors.blocked
-                      : isProtocol 
-                        ? (isDarkMode ? 'rgba(34, 197, 94, 0.25)' : 'rgba(167, 243, 208, 0.9)')
-                        : themeColors.appointment,
-                    borderColor: isBlocked
-                      ? themeColors.blockedBorder
-                      : isProtocol 
-                        ? (isDarkMode ? 'rgba(34, 197, 94, 0.5)' : 'rgba(110, 231, 183, 1)')
-                        : themeColors.appointmentBorder,
-                    color: themeColors.text,
-                    // Posicionamento baseado no grid
-                    left: `calc(100px + (100% - 100px) / ${weekDays.length} * ${position.dayIndex} + 4px)`,
-                    width: `calc((100% - 100px) / ${weekDays.length} - 8px)`,
-                    top: `${position.topPosition + 80}px`, // Adicionar offset do header
-                    height: `${position.height}px`,
-                    minHeight: '32px'
-                  }}
-                  onClick={() => onEditAppointment(appointment)}
-                >
-                  <div className="p-1.5 h-full flex flex-col justify-between">
-                    <div className="flex-1 min-h-0">
-                      <div className="text-xs font-bold leading-tight mb-1 truncate flex items-center gap-1" style={{ color: themeColors.text }}>
-                        {isBlocked && (
+              // Renderizar bloqueios primeiro (z-index menor)
+              const blockedElements = sortedBlocked.map((appointment, index) => {
+                const blockInterval = config?.blockInterval || 30;
+                const position = calculateAppointmentPosition(appointment, hours, weekDays, startOfGridWeek, blockInterval);
+                
+                if (!position) return null;
+                
+                const doctorName = appointment.professional?.name || 'Profissional';
+                const zIndex = 10 + index; // z-index baixo para bloqueios
+                
+                return (
+                  <div
+                    key={`blocked-${appointment.id}`}
+                    className="absolute pointer-events-auto cursor-pointer hover:shadow-lg transition-all duration-200 border group overflow-hidden rounded-md"
+                    style={{
+                      backgroundColor: themeColors.blocked,
+                      borderColor: themeColors.blockedBorder,
+                      color: themeColors.text,
+                      left: `calc(100px + (100% - 100px) / ${weekDays.length} * ${position.dayIndex} + 4px)`,
+                      width: `calc((100% - 100px) / ${weekDays.length} - 8px)`,
+                      top: `${position.topPosition + 80}px`,
+                      height: `${position.height}px`,
+                      minHeight: '32px',
+                      zIndex: zIndex
+                    }}
+                    onClick={() => onEditAppointment(appointment)}
+                  >
+                    <div className="p-1.5 h-full flex flex-col justify-between">
+                      <div className="flex-1 min-h-0">
+                        <div className="text-xs font-bold leading-tight mb-1 truncate flex items-center gap-1" style={{ color: themeColors.text }}>
                           <Lock className="h-3 w-3 flex-shrink-0" />
-                        )}
-                        {appointment.startTime.slice(0, 5)} - {appointment.endTime.slice(0, 5)}
-                      </div>
-                      <div className="text-xs truncate" style={{ color: themeColors.textMuted }}>
-                        {isBlocked ? doctorName : patientName}
-                      </div>
-                      {isBlocked && appointment.observation && (
-                        <div className="text-xs truncate mt-1" style={{ color: themeColors.textMuted }}>
-                          {appointment.observation}
+                          {appointment.startTime.slice(0, 5)} - {appointment.endTime.slice(0, 5)}
                         </div>
-                      )}
-                    </div>
-                    {!isBlocked && appointment.attendanceType && position.height > 50 && (
-                      <div className="text-xs mt-1 flex-shrink-0">
-                        <span className="px-1.5 py-0.5 rounded-full bg-black/10 dark:bg-white/10 text-xs font-medium">
-                          {isProtocol ? 'Protocolo' : 'Consulta'}
-                        </span>
+                        <div className="text-xs truncate" style={{ color: themeColors.textMuted }}>
+                          {doctorName}
+                        </div>
+                        {appointment.observation && (
+                          <div className="text-xs truncate mt-1" style={{ color: themeColors.textMuted }}>
+                            {appointment.observation}
+                          </div>
+                        )}
                       </div>
-                    )}
-                    {isBlocked && (
                       <div className="text-xs mt-1 flex-shrink-0">
                         <span className="px-1.5 py-0.5 rounded-full bg-black/10 dark:bg-white/10 text-xs font-medium">
                           Bloqueado
                         </span>
                       </div>
-                    )}
+                    </div>
+                    <div className="absolute inset-0 bg-black/5 dark:bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-md"></div>
                   </div>
-                  <div className="absolute inset-0 bg-black/5 dark:bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-md"></div>
-                </div>
-              );
-            })}
+                );
+              });
+              
+              // Renderizar agendamentos depois (z-index maior)
+              const regularElements = sortedRegular.map((appointment, index) => {
+                const blockInterval = config?.blockInterval || 30;
+                const position = calculateAppointmentPosition(appointment, hours, weekDays, startOfGridWeek, blockInterval);
+                
+                if (!position) return null;
+                
+                const patientName = appointment.patient?.name || 'Paciente';
+                const isProtocol = appointment.attendanceType === 'protocolo';
+                const zIndex = 50 + index; // z-index alto para agendamentos
+                
+                return (
+                  <div
+                    key={`appointment-${appointment.id}`}
+                    className="absolute pointer-events-auto cursor-pointer hover:shadow-lg transition-all duration-200 border group overflow-hidden rounded-md"
+                    style={{
+                      backgroundColor: isProtocol 
+                        ? (isDarkMode ? 'rgba(34, 197, 94, 0.25)' : 'rgba(167, 243, 208, 0.9)')
+                        : themeColors.appointment,
+                      borderColor: isProtocol 
+                        ? (isDarkMode ? 'rgba(34, 197, 94, 0.5)' : 'rgba(110, 231, 183, 1)')
+                        : themeColors.appointmentBorder,
+                      color: themeColors.text,
+                      left: `calc(100px + (100% - 100px) / ${weekDays.length} * ${position.dayIndex} + 4px)`,
+                      width: `calc((100% - 100px) / ${weekDays.length} - 8px)`,
+                      top: `${position.topPosition + 80}px`,
+                      height: `${position.height}px`,
+                      minHeight: '32px',
+                      zIndex: zIndex
+                    }}
+                    onClick={() => onEditAppointment(appointment)}
+                  >
+                    <div className="p-1.5 h-full flex flex-col justify-between">
+                      <div className="flex-1 min-h-0">
+                        <div className="text-xs font-bold leading-tight mb-1 truncate flex items-center gap-1" style={{ color: themeColors.text }}>
+                          {appointment.startTime.slice(0, 5)} - {appointment.endTime.slice(0, 5)}
+                        </div>
+                        <div className="text-xs truncate" style={{ color: themeColors.textMuted }}>
+                          {patientName}
+                        </div>
+                      </div>
+                      {appointment.attendanceType && position.height > 50 && (
+                        <div className="text-xs mt-1 flex-shrink-0">
+                          <span className="px-1.5 py-0.5 rounded-full bg-black/10 dark:bg-white/10 text-xs font-medium">
+                            {isProtocol ? 'Protocolo' : 'Consulta'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="absolute inset-0 bg-black/5 dark:bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-md"></div>
+                  </div>
+                );
+              });
+              
+              // Retornar todos os elementos na ordem correta
+              return [...blockedElements, ...regularElements];
+            })()}
           </div>
         </div>
       </div>

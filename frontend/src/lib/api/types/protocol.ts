@@ -18,21 +18,12 @@ export interface ProtocolService {
   protocolId?: string;
   createdAt?: string;
   updatedAt?: string;
-  service?: {
+  service: {  // ← ✅ Apenas uma versão, obrigatória
     id: string;
     name: string;
     type: string;
     requiresScheduling: boolean;
     createdAt: string;
-    // outros campos se necessário
-  };
-  Service?: {
-    id: string;
-    name: string;
-    type: string;
-    requiresScheduling: boolean;
-    createdAt: string;
-    // outros campos se necessário
   };
   defaultDuration?: number;
 }
@@ -41,8 +32,7 @@ export interface Protocol {
   id: string;
   name: string;
   totalPrice: number;
-  services: ProtocolService[];
-  protocolServices?: ProtocolService[];
+  protocolServices: ProtocolService[]; // ← ✅ Apenas um campo, nome consistente
   createdAt: string;
   updatedAt: string;
 }
@@ -64,7 +54,7 @@ export interface CreateProtocolData {
 export interface UpdateProtocolData {
   name: string;
   totalPrice: number;
-  services: ProtocolService[];
+  protocolServices: ProtocolService[]; // ← ✅ Consistente
 }
 
 export interface PatientProtocol {
@@ -90,9 +80,9 @@ export interface PatientServiceSession {
   sessionDate: string;
   observations?: string;
   nextAllowedDate?: string;
-  status: 'scheduled' | 'completed' | 'cancelled' | 'missed';
+  status: 'scheduled' | 'completed';
   patientProtocol?: PatientProtocol;
   protocolService?: ProtocolService;
   createdAt: string;
   updatedAt: string;
-} 
+}

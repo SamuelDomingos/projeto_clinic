@@ -3,7 +3,7 @@ import { User } from '../../users/entities/user.entity';
 import { PaymentMethod } from '../../payment-methods/entities/payment-method.entity';
 import { Category } from '../../categories/entities/category.entity';
 
-export type TransactionType = 'revenue' | 'expense';
+export type TransactionType = 'revenue' | 'expense' | 'invoice_payment'; // Adicionar invoice_payment aqui
 export type TransactionStatus = 'pending' | 'completed' | 'cancelled';
 
 @Entity('transactions')
@@ -11,7 +11,7 @@ export class Transaction {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'enum', enum: ['revenue', 'expense'] })
+  @Column({ type: 'enum', enum: ['revenue', 'expense', 'invoice_payment'] }) // Atualizar enum
   type: TransactionType;
 
   @Column({ type: 'decimal', precision: 10, scale: 2 })
@@ -30,6 +30,11 @@ export class Transaction {
   @JoinColumn({ name: 'category' })
   categoryData: Category;
 
+  // Adicionar referência para invoice (opcional)
+  @Column({ nullable: true })
+  invoiceId: string;
+
+  // Remover a linha duplicada de type que estava causando erro
   @Column({ type: 'timestamp' })
   dueDate: Date;
 
@@ -44,21 +49,6 @@ export class Transaction {
 
   @Column({ type: 'varchar', nullable: true })
   reference: string;
-
-  @Column({ type: 'int', nullable: true })
-  installments: number;
-
-  @Column({ type: 'int', nullable: true })
-  installmentNumber: number;
-
-  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
-  payableAmount: string | null; // Valor a pagar, se houver necessidade
-
-  @Column({ type: 'timestamp', nullable: true })
-  paidAt: Date | null; // Data do pagamento do débito
-
-  @Column({ type: 'varchar', nullable: true })
-  paidViaId: string | null; // ID da unidade ou conta bancária
 
   @Column({ type: 'varchar', nullable: true })
   documentNumber: string | null; // Número do documento
@@ -88,4 +78,4 @@ export class Transaction {
 
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   updatedAt: Date;
-} 
+}

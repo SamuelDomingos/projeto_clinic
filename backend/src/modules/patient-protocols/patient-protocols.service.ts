@@ -37,27 +37,33 @@ export class PatientProtocolsService {
         console.log('Protocolo não possui serviços associados. Não é possível criar sessões.');
         throw new NotFoundException('Protocolo não possui serviços associados. Não é possível criar sessões.');
       }
+      
+      // CORREÇÃO: Criar apenas UMA sessão por serviço
       for (const protocolService of protocol.protocolServices) {
-        // Cria apenas uma sessão por serviço, indicando o total de sessões
+        console.log('Criando sessão única para serviço:', protocolService.id, protocolService.numberOfSessions);
+        
         const exists = await manager.getRepository(PatientServiceSession).findOne({
           where: {
             patientProtocolId: savedPatientProtocol.id,
             protocolServiceId: protocolService.id,
+            sessionNumber: 0, // ← SEMPRE 0
           },
         });
+        
         if (!exists) {
           const session = await manager.getRepository(PatientServiceSession).save({
             patientProtocolId: savedPatientProtocol.id,
             protocolServiceId: protocolService.id,
-            sessionNumber: 1,
-            totalSessions: protocolService.numberOfSessions,
+            sessionNumber: 0, // ← POSIÇÃO 0
+            totalSessions: protocolService.numberOfSessions, // ← TOTAL
             status: 'scheduled',
           });
-          console.log('Sessão criada:', session);
+          console.log('Sessão única criada:', session);
         } else {
           console.log('Sessão já existe:', exists);
         }
       }
+      
       console.log('Finalizando criação do PatientProtocol:', savedPatientProtocol.id);
       return savedPatientProtocol;
     });
@@ -74,28 +80,29 @@ export class PatientProtocolsService {
       console.log('Protocolo ou serviços não encontrados!');
       return;
     }
+    
+    // CORREÇÃO: Usar as variáveis corretas do contexto
+    // CORREÇÃO: Criar apenas UMA sessão por serviço
     for (const protocolService of patientProtocol.protocol.protocolServices) {
-      console.log('Criando sessões para serviço:', protocolService.id, protocolService.numberOfSessions);
-      for (let i = 1; i <= protocolService.numberOfSessions; i++) {
-        // Verifica se já existe a sessão para evitar duplicidade
-        const exists = await this.patientServiceSessionRepository.findOne({
-          where: {
-            patientProtocolId: patientProtocol.id,
-            protocolServiceId: protocolService.id,
-            sessionNumber: i,
-          },
+      console.log('Criando sessão única para serviço:', protocolService.id, protocolService.numberOfSessions);
+      
+      const exists = await this.patientServiceSessionRepository.findOne({
+        where: {
+          patientProtocolId: patientProtocol.id,
+          protocolServiceId: protocolService.id,
+          sessionNumber: 0, // ← SEMPRE 0
+        },
+      });
+      
+      if (!exists) {
+        const session = await this.patientServiceSessionRepository.save({
+          patientProtocolId: patientProtocol.id,
+          protocolServiceId: protocolService.id,
+          sessionNumber: 0, // ← POSIÇÃO 0
+          totalSessions: protocolService.numberOfSessions, // ← TOTAL
+          status: 'scheduled',
         });
-        if (!exists) {
-          await this.patientServiceSessionRepository.save({
-            patientProtocolId: patientProtocol.id,
-            protocolServiceId: protocolService.id,
-            sessionNumber: i,
-            status: 'scheduled',
-          });
-          console.log('Sessão criada:', { patientProtocolId: patientProtocol.id, protocolServiceId: protocolService.id, sessionNumber: i });
-        } else {
-          console.log('Sessão já existe:', { patientProtocolId: patientProtocol.id, protocolServiceId: protocolService.id, sessionNumber: i });
-        }
+        console.log('Sessão única criada:', session);
       }
     }
   }
@@ -123,4 +130,4 @@ export class PatientProtocolsService {
     await this.patientProtocolRepository.remove(patientProtocol);
     return { success: true };
   }
-} 
+}

@@ -412,16 +412,20 @@ export function BudgetDrawer({ open, onOpenChange, protocols, loadingProtocols, 
           ...updateData,
           type: "budget" as const,
           patientId,
-          performedBy: "usuário logado", // ajuste conforme necessário
+          performedBy: "usuário logado",
           protocolId: selectedProtocolIds[0] || undefined,
         };
+        
+        // ADICIONE ESTE LOG PARA DEBUG
+        console.log('📤 Dados sendo enviados para API:', createData);
+        
         await invoiceApi.create(createData);
         toast({ title: "Sucesso", description: "Orçamento criado com sucesso!" });
       }
       onOpenChange(false);
       if (onSaved) onSaved();
     } catch (error) {
-      console.error('Erro ao salvar:', error);
+      console.error('❌ Erro detalhado:', error);
       toast({ title: "Erro", description: "Erro ao salvar alterações", variant: "destructive" });
     }
   };
@@ -936,4 +940,4 @@ export function BudgetDrawer({ open, onOpenChange, protocols, loadingProtocols, 
       </DialogContent>
     </Dialog>
   );
-} 
+}

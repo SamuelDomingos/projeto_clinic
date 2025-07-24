@@ -6,10 +6,7 @@ export const protocolApi = {
   list: async (): Promise<Protocol[]> => {
     try {
       const response = await api.get<Protocol[]>('/protocols');
-      return response.data.map(protocol => ({
-        ...protocol,
-        services: protocol.services || protocol.protocolServices || []
-      }));
+      return response.data; // ← ✅ Correto agora!
     } catch (error) {
       if (isAxiosError(error) && error.response?.data) {
         throw new Error((error.response.data as { error: string }).error);
@@ -21,11 +18,7 @@ export const protocolApi = {
   getById: async (id: string): Promise<Protocol> => {
     try {
       const response = await api.get<Protocol>(`/protocols/${id}`);
-      const protocol = response.data;
-      return {
-        ...protocol,
-        services: protocol.services || protocol.protocolServices || []
-      };
+      return response.data; // ← Sem mapeamento desnecessário
     } catch (error) {
       if (isAxiosError(error) && error.response) {
         throw new Error((error.response.data as ApiError).error);
@@ -154,6 +147,7 @@ export const patientProtocolApi = {
   getById: async (id: string): Promise<PatientProtocol> => {
     try {
       const response = await api.get<PatientProtocol>(`/patient-protocols/${id}`);
+            console.log('[PATIENT-PROTOCOL] response.data:', response.data);
       return response.data;
     } catch (error) {
       if (isAxiosError(error) && error.response) {
@@ -290,4 +284,4 @@ export const patientServiceSessionApi = {
       throw new Error('Erro ao deletar sessão de serviço');
     }
   }
-}; 
+};

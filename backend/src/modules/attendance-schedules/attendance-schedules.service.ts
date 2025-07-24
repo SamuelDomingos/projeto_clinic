@@ -235,7 +235,15 @@ export class AttendanceSchedulesService {
   async findAll(): Promise<AttendanceSchedule[]> {
     // Buscar com relacionamentos selecionados e campos específicos
     const schedules = await this.attendanceScheduleRepository.find({
-      relations: ['patient', 'professional', 'unit', 'patientProtocol', 'serviceSession'],
+      relations: [
+        'patient', 
+        'professional', 
+        'unit', 
+        'patientProtocol', 
+        'serviceSession',
+        'serviceSession.protocolService',
+        'serviceSession.protocolService.service'
+      ],
       select: {
         id: true,
         date: true,
@@ -249,7 +257,10 @@ export class AttendanceSchedulesService {
           id: true,
           name: true,
           phone: true,
-          email: true
+          email: true,
+          birthDate: true,
+          cpf: true,
+          rg: true
         },
         professional: {
           id: true,
@@ -269,7 +280,15 @@ export class AttendanceSchedulesService {
           id: true,
           sessionNumber: true,
           status: true,
-          totalSessions: true
+          totalSessions: true,
+          protocolService: {
+            id: true,
+            service: {
+              id: true,
+              name: true,
+              type: true
+            }
+          }
         }
       }
     });

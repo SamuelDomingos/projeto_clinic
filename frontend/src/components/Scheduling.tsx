@@ -6,7 +6,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar, Clock, Plus, CalendarDays, ChevronLeft, ChevronRight, Edit, Eye, MoreVertical } from "lucide-react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "react-beautiful-dnd";
 import AppointmentEditor from "./AppointmentEditor/AppointmentEditor";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { Appointment as GlobalAppointment } from '@/lib/api/types/appointment';
 import type { User } from '@/lib/api/types/common';
 import { userApi } from "../lib/api";
@@ -49,27 +48,6 @@ function getPreviewBg(hex: string, dark = false) {
   return dark
     ? `rgba(${r},${g},${b},0.18)`
     : `rgba(${r},${g},${b},0.12)`;
-}
-
-// Adaptador para converter o mock para o tipo global
-function adaptAppointment(appointment: AppointmentMock, doctor: User): GlobalAppointment {
-  // Força o status para um valor válido
-  const status: ValidStatus = VALID_STATUSES.includes(appointment.status as ValidStatus)
-    ? (appointment.status as ValidStatus)
-    : "scheduled";
-  return {
-    id: appointment.id,
-    patientId: appointment.patient, // Aqui você pode mapear para um id real se tiver
-    doctorId: doctor.id,
-    startTime: appointment.time,
-    createdAt: '',
-    updatedAt: '',
-    date: appointment.date,
-    duration: appointment.duration,
-    procedure: appointment.procedure,
-    status,
-    notes: appointment.notes,
-  };
 }
 
 // Tipo extendido para agendamento com campos extras opcionais

@@ -4,7 +4,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,48 +17,18 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  CalendarIcon,
-  Clock,
-  ChevronDown,
-  Accessibility,
-  EarOff,
-  User as UserIcon,
-  Trash2,
-  Minus,
-  Plus,
-  ChevronRight,
-} from "lucide-react";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
-import { cn } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
-import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import type { User, Supplier } from "@/lib/api";
-import { Appointment } from '@/lib/api/types/appointment';
 import { userApi, supplierApi } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import { patientApi } from '@/lib/api/services/patient';
 import { getScheduleTypes } from '@/lib/api/services/schedule';
 import { patientProtocolApi, patientServiceSessionApi } from '@/lib/api/services/protocol';
-import { Command, CommandInput, CommandList, CommandItem } from '@/components/ui/command';
 import type { Patient } from '@/lib/api/types/patient';
 import type { ScheduleType } from '@/lib/api/types/schedule';
 import type { PatientProtocol, PatientServiceSession } from '@/lib/api/types/protocol';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { protocolApi } from '@/lib/api/services/protocol';
 import type { Protocol } from '@/lib/api/types/protocol';
 import PatientInfoForm from './PatientInfoForm';
@@ -68,6 +37,7 @@ import DocumentsAttachmentsSection from './DocumentsAttachmentsSection';
 import AppointmentInfoForm from './AppointmentInfoForm';
 import type { CreateAttendanceScheduleData } from '@/lib/api/types/attendanceSchedule';
 import { attendanceScheduleApi } from '@/lib/api/services/attendanceSchedule';
+import { Calendar, CheckCircle, Clock } from "lucide-react";
 
 interface AppointmentEditorCardProps {
   isOpen: boolean;
@@ -75,28 +45,34 @@ interface AppointmentEditorCardProps {
   appointment?: {
     id: string;
     patientId: string;
-    doctorId: string;
+    userId: string;
+    unitId: string;
     date: string;
     startTime: string;
     endTime?: string;
-    duration: number;
-    procedure: string;
-    status: string;
-    notes: string;
-    patient: {
+    duration?: number;
+    procedure?: string;
+    status?: string;
+    notes?: string;
+    observation?: string;
+    patient?: {
       id: string;
       name: string;
-      email: string;
-      phone: string;
+      email?: string;
+      phone?: string;
+      birthDate?: string;
+      cpf?: string;
+      rg?: string;
     };
-    doctor: undefined;
-    createdAt: string;
-    updatedAt: string;
+    professional?: {
+      id: string;
+      name: string;
+    };
     unit?: {
       id: string;
       name: string;
     };
-    attendanceType?: string;
+    attendanceType?: 'protocolo' | 'avulso';
     patientProtocol?: {
       id: string;
       name?: string;
@@ -109,8 +85,11 @@ interface AppointmentEditorCardProps {
     isBlocked?: boolean;
     blockedByUserId?: string;
     blockedByUserName?: string;
+    value?: number;
+    createdAt?: string;
+    updatedAt?: string;
   };
-  onSave?: (appointment: Appointment) => Promise<void>;
+  onSave?: (appointment: CreateAttendanceScheduleData) => void;
   doctors?: User[];
   allUsers?: User[];
   patientId?: string;
@@ -142,6 +121,7 @@ export default function AppointmentEditorCard({
   onClose,
   appointment,
 }: AppointmentEditorCardProps) {
+  const [unit, setUnit] = useState('');
   const [formData, setFormData] = useState<FormDataType>({
     patientId: '',
     doctorId: '',
@@ -159,10 +139,16 @@ export default function AppointmentEditorCard({
 
   useEffect(() => {
     if (appointment && isOpen) {
-      console.log('Inicializando formulário com dados do appointment:', appointment);
+      console.log('=== APPOINTMENT DATA RECEIVED ===');
+      console.log('Full appointment object:', appointment);
+      console.log('Unit data:', appointment.unit);
+      console.log('Professional data:', appointment.professional);
+      console.log('Patient data:', appointment.patient);
+      console.log('Protocol data:', appointment.patientProtocol);
+      console.log('Service session data:', appointment.serviceSession);
       
       // Verificar se é um bloqueio de agenda
-      const isBlocked = appointment.patientId === '' || appointment.patientId === undefined;
+      const isBlocked = appointment.isBlocked;
       setBlockSchedule(isBlocked);
       
       // Calcular duração a partir do horário de início e fim se disponível
@@ -174,17 +160,20 @@ export default function AppointmentEditorCard({
         const endTotalMinutes = endHours * 60 + endMinutes;
         duration = endTotalMinutes - startTotalMinutes;
       }
+
+      console.log(appointment);
       
-      // Preencher o formulário principal
-      setFormData({
-        patientId: appointment.patientId || '',
-        doctorId: appointment.doctorId || '',
+      
+      // Dados que serão definidos no formData
+      const formDataToSet = {
+        patientId: appointment.patient?.id || '',
+        doctorId: appointment.professional?.id || '',
         date: appointment.date || new Date().toISOString().split('T')[0],
         startTime: appointment.startTime ? appointment.startTime.substring(0, 5) : '',
         endTime: appointment.endTime ? appointment.endTime.substring(0, 5) : '',
         duration: duration,
         procedure: appointment.procedure || '',
-        notes: appointment.notes || '',
+        notes: appointment.observation || '',
         unit: appointment.unit?.id || '',
         attendanceType: appointment.attendanceType || '',
         patientProtocolId: appointment.patientProtocol?.id || '',
@@ -193,40 +182,63 @@ export default function AppointmentEditorCard({
         isBlocked: isBlocked,
         blockedByUserId: appointment.blockedByUserId || '',
         blockedByUserName: appointment.blockedByUserName || '',
-      });
+        value: appointment.value,
+        observation: appointment.observation || '',
+      };
       
-      // Preencher dados do paciente se disponível
+      console.log('FormData to be set:', formDataToSet);
+      
+      // Preencher o formulário principal
+      setFormData(formDataToSet);
+      
+      // Definir unidade separadamente para garantir que seja aplicada
+      if (appointment.unit?.id) {
+        setUnit(appointment.unit.id);
+        console.log('Setting unit to:', appointment.unit.id);
+      }
+      
+      // Preencher dados do paciente se disponível (usando dados já presentes no appointment)
       if (appointment.patient) {
         setPatientDetailsFormData({
           name: appointment.patient.name || '',
           email: appointment.patient.email || '',
           phone: appointment.patient.phone || '',
-          birthDate: '',  // Preencher se disponível
-          cpf: '',        // Preencher se disponível
-          rg: '',         // Preencher se disponível
+          birthDate: appointment.patient.birthDate || '',
+          cpf: appointment.patient.cpf || '',
+          rg: appointment.patient.rg || '',
         });
       }
       
-      // Definir outros estados relacionados
-      if (appointment.unit) {
-        setUnit(appointment.unit.id || '');
+      // Definir profissional solicitante
+      if (!isBlocked && appointment.professional?.id) {
+        setRequestingProfessional(appointment.professional.id);
+        console.log('Setting requesting professional (normal):', appointment.professional.id);
+      } else if (isBlocked && appointment.blockedByUserId) {
+        setRequestingProfessional(appointment.blockedByUserId);
+        console.log('Setting requesting professional (blocked):', appointment.blockedByUserId);
       }
       
       // Definir tipo de atendimento
       if (appointment.attendanceType) {
         setSelectedScheduleType(appointment.attendanceType);
+        console.log('Setting schedule type:', appointment.attendanceType);
       }
       
       // Se for um protocolo, definir o protocolo selecionado
       if (appointment.patientProtocol) {
         setSelectedProtocolId(appointment.patientProtocol.id || '');
+        console.log('Setting protocol ID:', appointment.patientProtocol.id);
       }
       
       // Se tiver sessão de serviço, definir a sessão selecionada
       if (appointment.serviceSession) {
         setSelectedServiceSessionId(appointment.serviceSession.id || '');
+        console.log('Setting service session ID:', appointment.serviceSession.id);
       }
+      
+      console.log('=== END APPOINTMENT DATA PROCESSING ===');
     } else if (isOpen && !appointment) {
+      // Reset do formulário para novo agendamento
       setFormData({
         patientId: '',
         doctorId: '',
@@ -250,6 +262,10 @@ export default function AppointmentEditorCard({
         rg: '',
       });
       setBlockSchedule(false);
+      setRequestingProfessional('');
+      setSelectedScheduleType('');
+      setSelectedProtocolId('');
+      setSelectedServiceSessionId('');
     }
   }, [appointment, isOpen]);
 
@@ -263,11 +279,7 @@ export default function AppointmentEditorCard({
     rg: '',
   });
 
-  const [serviceType, setServiceType] = useState("");
-  const [unit, setUnit] = useState("");
   const [requestingProfessional, setRequestingProfessional] = useState("");
-  const [patientEnrollment, setPatientEnrollment] = useState("");
-  const [patientValidity, setPatientValidity] = useState("");
   const [reimbursementPayment, setReimbursementPayment] = useState(false);
   const [blockSchedule, setBlockSchedule] = useState(false);
   const [isAdditionalInfoOpen, setIsAdditionalInfoOpen] = useState(false);
@@ -288,7 +300,6 @@ export default function AppointmentEditorCard({
   const [showFinanceiro, setShowFinanceiro] = useState(false);
   const [protocolsAvailable, setProtocolsAvailable] = useState<Protocol[]>([]);
   const [protocolSearch, setProtocolSearch] = useState('');
-  const [protocolSearchOpen, setProtocolSearchOpen] = useState(false);
   const [selectedProtocolsToBuy, setSelectedProtocolsToBuy] = useState<Protocol[]>([]);
   const [pagamentos, setPagamentos] = useState<Array<{
     forma: string;
@@ -400,6 +411,7 @@ export default function AppointmentEditorCard({
 
   useEffect(() => {
     if (formData.patientId) {
+      console.log('Loading protocols for patient:', formData.patientId);
       setLoadingServiceSessions(true);
       Promise.all([
         patientProtocolApi.list(),
@@ -408,6 +420,7 @@ export default function AppointmentEditorCard({
       .then(async ([allProtocols, allSessions]) => {
         // Filtrar protocolos pelo patientId após recebê-los
         const filteredProtocols = allProtocols.filter(p => p.patientId === formData.patientId);
+        console.log('Filtered protocols for patient:', filteredProtocols);
         
         // Buscar detalhes completos do protocolo para cada PatientProtocol
         const enriched = await Promise.all(
@@ -424,6 +437,8 @@ export default function AppointmentEditorCard({
         );
         setPatientProtocols(enriched);
         setServiceSessions(allSessions);
+        console.log('Final enriched protocols:', enriched);
+        console.log('Service sessions:', allSessions);
       })
       .catch(error => {
         console.error("Erro ao carregar protocolos ou sessões do paciente:", error);
@@ -443,58 +458,7 @@ export default function AppointmentEditorCard({
       setServiceSessions([]);
     }
   }, [formData.patientId, toast]);
-
-  const loadDoctorsAndUsers = async () => {
-    try {
-      // Carregar médicos (usuários com role 'health_professional')
-      const doctorsResponse = await userApi.list({ role: 'health_professional' });
-      if (Array.isArray(doctorsResponse)) {
-        setAvailableDoctors(doctorsResponse);
-      } else {
-        console.error('Resposta inválida ao carregar médicos:', doctorsResponse);
-        setAvailableDoctors([]);
-      }
-
-      // Carregar todos os usuários para o profissional solicitante
-      const usersResponse = await userApi.list();
-      if (Array.isArray(usersResponse)) {
-        setAvailableUsers(usersResponse);
-      } else {
-        console.error('Resposta inválida ao carregar usuários:', usersResponse);
-        setAvailableUsers([]);
-      }
-    } catch (error) {
-      console.error('Erro ao carregar usuários:', error);
-      setAvailableDoctors([]);
-      setAvailableUsers([]);
-    }
-  };
-
-  const loadUnits = async () => {
-    try {
-      const response = await supplierApi.getSuppliers({ category: 'unidade' });
-      setUnits(response);
-    } catch (error) {
-      console.error('Erro ao carregar unidades:', error);
-      setUnits([]);
-    }
-  };
-
-  const handlePatientSelect = (patientId) => {
-    setFormData((prev) => ({ ...prev, patientId }));
-    const selectedPatient = patients.find((p) => p.id === patientId);
-    if (selectedPatient) {
-      setPatientDetailsFormData({
-        name: selectedPatient.name,
-        email: selectedPatient.email,
-        phone: selectedPatient.phone,
-        birthDate: selectedPatient.birthDate,
-        cpf: selectedPatient.cpf,
-        rg: selectedPatient.rg,
-      });
-    }
-  };
-
+  
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -591,9 +555,6 @@ export default function AppointmentEditorCard({
         payload.blockedEndTime = endTime ? String(endTime) : '';
       }
       
-      // Log para debug
-      console.log('Payload enviado:', payload);
-      
       if (typeof formData.patientProtocolId !== 'undefined' && formData.patientProtocolId !== '') {
         payload.patientProtocolId = String(formData.patientProtocolId);
       }
@@ -631,27 +592,6 @@ export default function AppointmentEditorCard({
   // SESSÕES UTILIZADAS POR PROTOCOLO
   const getSessionsForProtocol = (protocolId: string): PatientServiceSession[] =>
     serviceSessions.filter((s: PatientServiceSession) => s.patientProtocolId === protocolId);
-
-  // SESSÕES DISPONÍVEIS (NÃO UTILIZADAS)
-  const getAvailableSessions = (protocolId: string) => {
-    const protocol = patientProtocols.find(p => p.id === protocolId);
-    if (!protocol || !protocol.protocol?.services) return [];
-    const sessions = protocol.protocol.services.flatMap(service => {
-      const total = typeof service.numberOfSessions === 'string' ? Number(service.numberOfSessions) : service.numberOfSessions || 0;
-      const used = getSessionsForProtocol(protocolId).filter(s => s.protocolServiceId === String(service.id) && s.status === 'completed').length;
-      let serviceName: string = '';
-      if ('name' in service && typeof service.name === 'string') serviceName = service.name;
-      else if ('service' in service && service.service && typeof service.service.name === 'string') serviceName = service.service.name;
-      else if ('Service' in service && service.Service && typeof service.Service.name === 'string') serviceName = service.Service.name;
-      return Array.from({ length: total }, (_, i) => ({
-        serviceId: String(service.id),
-        serviceName,
-        sessionNumber: String(i + 1),
-        used: i < used,
-      }));
-    });
-    return sessions;
-  };
 
   const filteredProtocols = protocolSearch.trim()
     ? protocolsAvailable.filter(p => p.name.toLowerCase().includes(protocolSearch.toLowerCase()))
@@ -730,29 +670,9 @@ export default function AppointmentEditorCard({
     setSelectedTab('scheduling');
   }
 
-  // Função para buscar próximo horário disponível (simulação)
-  function getNextAvailableSlot(doctorId) {
-    // Aqui você pode integrar com sua API real de agenda
-    // Simulação: retorna o próximo horário inteiro disponível hoje
-    const now = new Date();
-    const nextHour = now.getHours() + 1;
-    if (nextHour > 17) {
-      // Se já passou do horário comercial, sugere amanhã às 8h
-      const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-      return {
-        date: tomorrow.toISOString().split('T')[0],
-        startTime: '08:00',
-      };
-    }
-    return {
-      date: now.toISOString().split('T')[0],
-      startTime: `${String(nextHour).padStart(2, '0')}:00`,
-    };
-  }
-
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-5xl h-[90vh] p-0 flex flex-col">
+      <DialogContent className="w-screen h-screen max-w-none max-h-none rounded-none flex flex-col">
         {/* Header fixo */}
         <DialogHeader>
           <DialogTitle asChild>
@@ -769,7 +689,7 @@ export default function AppointmentEditorCard({
                 >
                   <TabsList className="flex gap-2">
                     <TabsTrigger value="scheduling">Agendamento</TabsTrigger>
-                    <TabsTrigger value="protocols">Protocolos</TabsTrigger>
+                    {!blockSchedule && <TabsTrigger value="protocols">Protocolos</TabsTrigger>}
                     {showFinanceiro && <TabsTrigger value="financial">Financeiro</TabsTrigger>}
                   </TabsList>
                 </Tabs>
@@ -1080,156 +1000,75 @@ export default function AppointmentEditorCard({
                 <TabsContent value="protocols" className="h-full m-0 p-0">
                   <div className="h-full overflow-y-auto">
                     <div className="p-6 space-y-8">
-                      {/* Campo de busca de protocolo para compra */}
-                      <div>
-                        <Label className="font-semibold mb-2">Comprar novos protocolos</Label>
-                        <Popover open={protocolSearchOpen} onOpenChange={setProtocolSearchOpen}>
-                          <PopoverTrigger asChild>
-                            <Input
-                              value={protocolSearch}
-                              onFocus={() => setProtocolSearchOpen(true)}
-                              onChange={e => setProtocolSearch(e.target.value)}
-                              placeholder="Buscar protocolo pelo nome"
-                              className="h-11 border-2 focus:border-primary"
-                              autoComplete="off"
-                            />
-                          </PopoverTrigger>
-                          <PopoverContent className="w-96 p-0" sideOffset={4} align="start">
-                            <Command>
-                              <CommandInput placeholder="Digite para buscar..." value={protocolSearch} onValueChange={setProtocolSearch} />
-                              <CommandList>
-                                {filteredProtocols.length === 0 && (
-                                  <div className="p-4 flex flex-col items-center text-muted-foreground">
-                                    Nenhum protocolo encontrado
-                                  </div>
-                                )}
-                                {filteredProtocols.map(protocol => (
-                                  <CommandItem
-                                    key={protocol.id}
-                                    value={protocol.name}
-                                    onSelect={() => {
-                                      if (!selectedProtocolsToBuy.some(p => p.id === protocol.id)) {
-                                        setSelectedProtocolsToBuy([...selectedProtocolsToBuy, protocol]);
-                                      }
-                                      setProtocolSearchOpen(false);
-                                      setProtocolSearch('');
-                                    }}
-                                  >
-                                    {protocol.name}
-                                  </CommandItem>
-                                ))}
-                              </CommandList>
-                            </Command>
-                          </PopoverContent>
-                        </Popover>
-                        {/* Exibir protocolos selecionados para compra */}
-                        {selectedProtocolsToBuy.length > 0 && (
-                          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {selectedProtocolsToBuy.map(protocol => (
-                              <Card key={protocol.id} className="border rounded-lg">
-                                <CardHeader>
-                                  <CardTitle>{protocol.name}</CardTitle>
-                                  <div className="text-xs text-muted-foreground">Valor: R$ {protocol.totalPrice}</div>
-                                </CardHeader>
-                                <CardContent>
-                                  <div className="mb-2 text-xs text-muted-foreground">Serviços:</div>
-                                  <ul className="mb-2">
-                                    {(protocol.protocolServices || []).map(ps => (
-                                      <li key={ps.id} className="flex items-center gap-2">
-                                        <span className="font-medium">{ps.service?.name}</span>
-                                        <Badge variant="outline">{ps.numberOfSessions} sessões</Badge>
-                                      </li>
-                                    ))}
-                                  </ul>
-                                  <Button
-                                    size="sm"
-                                    variant="destructive"
-                                    onClick={() => setSelectedProtocolsToBuy(selectedProtocolsToBuy.filter(p => p.id !== protocol.id))}
-                                  >
-                                    Remover
-                                  </Button>
-                                </CardContent>
-                              </Card>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+
                       {/* Protocolos já adquiridos */}
-                      <h4 className="font-semibold mb-2 mt-8">Protocolos já adquiridos</h4>
+                      <h4 className="font-semibold mb-4 mt-8 flex items-center gap-2">
+                        <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                        Protocolos Agendados para hoje
+                      </h4>
+                      
+                      {/* Mostrar informações da sessão agendada se existir */}
+                      {appointment?.serviceSession && (
+                        <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-950 border-2 border-blue-300 dark:border-blue-700 rounded-lg">
+                          <div className="flex items-center gap-3 mb-2">
+                            <Calendar className="w-7 h-7" />
+                            <div>
+                              <h5 className="font-bold text-blue-800 dark:text-blue-200 text-lg">Sessão Agendada para este Atendimento</h5>
+                              <p className="text-blue-600 dark:text-blue-400 text-sm">Esta é a sessão específica que será realizada neste agendamento</p>
+                            </div>
+                          </div>
+                          <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-blue-200 dark:border-blue-700">
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                              <div>
+                                <span className="text-gray-600 dark:text-gray-400 font-medium">Sessão:</span>
+                                <div className="font-bold text-blue-800 dark:text-blue-200">{appointment.serviceSession.sessionNumber} de {appointment.serviceSession.totalSessions}</div>
+                              </div>
+                              <div>
+                                <span className="text-gray-600 dark:text-gray-400 font-medium">Tipo de Serviço:</span>
+                                <div className="font-bold text-blue-800 dark:text-blue-200 capitalize">
+                                  {appointment.serviceSession.protocolService?.service?.name || 'Serviço não identificado'}
+                                </div>
+                              </div>
+                              <div>
+                                <span className="text-gray-600 dark:text-gray-400 font-medium">Categoria:</span>
+                                <div className="font-bold text-blue-800 dark:text-blue-200 capitalize">
+                                  {appointment.serviceSession.protocolService?.service?.type || 'Não definido'}
+                                </div>
+                              </div>
+                              <div>
+                                <span className="text-gray-600 dark:text-gray-400 font-medium">Status:</span>
+                                <div className="font-bold text-blue-800 dark:text-blue-200 capitalize flex items-center gap-2">
+                                  {appointment.serviceSession.status === 'scheduled' ? (
+                                    <>
+                                      <Calendar className="w-4 h-4" />
+                                      Agendada
+                                    </>
+                                  ) : appointment.serviceSession.status === 'completed' ? (
+                                    <>
+                                      <CheckCircle className="w-4 h-4" />
+                                      Realizada
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Clock className="w-4 h-4" />
+                                      {appointment.serviceSession.status}
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      
                       {patientProtocols.length === 0 ? (
-                        <div className="text-muted-foreground text-center py-8">Nenhum protocolo adquirido</div>
+                        <div className="text-muted-foreground text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+                          <div className="text-4xl mb-2">📋</div>
+                          <div>Nenhum protocolo adquirido</div>
+                        </div>
                       ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                          {patientProtocols.map(protocol => (
-                            <Card key={protocol.id} className="border border-green-400 bg-background shadow-sm rounded-lg p-0">
-                              <CardHeader className="pb-2">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-base font-semibold text-primary">{protocol.protocol?.name || 'Protocolo'}</span>
-                                  <span className="text-xs bg-green-100 text-green-800 rounded px-2 py-0.5">Já adquirido</span>
-                                </div>
-                                <div className="text-xs text-muted-foreground mt-1">{protocol.purchaseDate ? new Date(protocol.purchaseDate).toLocaleDateString() : '-'}</div>
-                              </CardHeader>
-                              <CardContent className="pt-0 pb-3">
-                                <div className="space-y-3">
-                                {(protocol.protocol?.protocolServices || []).map(ps => {
-                                  const total = Number(ps.numberOfSessions) || 0;
-                                  const used = getSessionsForProtocol(protocol.id).filter(s => s.protocolServiceId === String(ps.serviceId) && s.status === 'completed').length;
-                                  return (
-                                      <div key={ps.id} className="flex flex-col gap-0.5">
-                                        <div className="flex items-center justify-between">
-                                          <span className="text-sm font-medium text-foreground">{ps.service?.name}</span>
-                                          <span className="text-xs text-muted-foreground">{used}/{total}</span>
-                                      </div>
-                                        <div className="flex gap-1 mt-0.5">
-                                          {(() => {
-                                            const serviceId = String(ps.id);
-                                            const protocolId = String(protocol.id);
-                                            const sessionsForService = serviceSessions.filter(
-                                              s => String(s.protocolServiceId) === serviceId && String(s.patientProtocolId) === protocolId
-                                            );
-                                            if (loadingServiceSessions) {
-                                              return <span className="text-xs text-muted-foreground">Carregando sessões...</span>;
-                                            }
-                                            if (sessionsForService.length === 0) {
-                                              return <span className="text-xs text-muted-foreground">Nenhuma sessão encontrada</span>;
-                                            }
-                                            return sessionsForService.map((session) => {
-                                              const isUsed = session.status === 'completed';
-                                              const isSelected =
-                                                selectedSession &&
-                                                String(selectedSession.protocolId) === protocolId &&
-                                                String(selectedSession.serviceId) === serviceId &&
-                                                Number(selectedSession.sessionNumber) === Number(session.sessionNumber);
-                                              return (
-                                                <span
-                                                  key={serviceId + '-' + session.sessionNumber}
-                                                  className={
-                                                    'inline-block w-4 h-4 rounded-full transition ' +
-                                                    (isUsed
-                                                      ? 'bg-green-500'
-                                                      : isSelected
-                                                        ? 'bg-blue-500 ring-2 ring-blue-300 cursor-pointer'
-                                                        : 'bg-muted border border-gray-300 cursor-pointer hover:bg-blue-400')
-                                                  }
-                                                  title={isUsed ? 'Sessão utilizada' : loadingServiceSessions ? 'Carregando sessões...' : 'Clique para agendar esta sessão'}
-                                                  onClick={() => {
-                                                    if (!isUsed && !loadingServiceSessions && serviceSessions.length > 0) {
-                                                      handleMarkSession(protocol, ps, session.sessionNumber);
-                                                    }
-                                                  }}
-                                                  style={{ cursor: isUsed || loadingServiceSessions || serviceSessions.length === 0 ? 'not-allowed' : 'pointer', opacity: loadingServiceSessions || serviceSessions.length === 0 ? 0.5 : 1 }}
-                                                />
-                                              );
-                                            });
-                                          })()}
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                                </div>
-                              </CardContent>
-                            </Card>
-                          ))}
+                   
                         </div>
                       )}
                     </div>

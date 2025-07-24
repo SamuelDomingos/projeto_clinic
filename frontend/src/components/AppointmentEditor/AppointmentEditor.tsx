@@ -4,7 +4,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,38 +18,16 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  CalendarIcon,
-  Clock,
-  ChevronDown,
-  Accessibility,
-  EarOff,
-  User as UserIcon,
-  Trash2,
-  Minus,
-  Plus,
-  ChevronRight,
-} from "lucide-react";
-import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
-import { cn } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
-import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import type { User, Supplier } from "@/lib/api";
 import { Appointment } from '@/lib/api/types/appointment';
 import { userApi, supplierApi } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import { patientApi } from '@/lib/api/services/patient';
 import { getScheduleTypes } from '@/lib/api/services/schedule';
 import { patientProtocolApi, patientServiceSessionApi } from '@/lib/api/services/protocol';
@@ -161,12 +138,7 @@ export default function AppointmentEditor({
     cpf: '',
     rg: '',
   });
-
-  const [serviceType, setServiceType] = useState("");
-  const [unit, setUnit] = useState("");
   const [requestingProfessional, setRequestingProfessional] = useState("");
-  const [patientEnrollment, setPatientEnrollment] = useState("");
-  const [patientValidity, setPatientValidity] = useState("");
   const [reimbursementPayment, setReimbursementPayment] = useState(false);
   const [blockSchedule, setBlockSchedule] = useState(false);
   const [isAdditionalInfoOpen, setIsAdditionalInfoOpen] = useState(false);
@@ -181,8 +153,6 @@ export default function AppointmentEditor({
   const [patientProtocols, setPatientProtocols] = useState<PatientProtocol[]>([]);
   const [serviceSessions, setServiceSessions] = useState<PatientServiceSession[]>([]);
   const [loadingServiceSessions, setLoadingServiceSessions] = useState(false);
-  const [selectedProtocolId, setSelectedProtocolId] = useState<string>('');
-  const [selectedServiceSessionId, setSelectedServiceSessionId] = useState<string>('');
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [showFinanceiro, setShowFinanceiro] = useState(false);
   const [protocolsAvailable, setProtocolsAvailable] = useState<Protocol[]>([]);
@@ -305,6 +275,7 @@ export default function AppointmentEditor({
         patientServiceSessionApi.list()
       ])
       .then(async ([allProtocols, allSessions]) => {
+        
         // Filtrar protocolos pelo patientId após recebê-los
         const filteredProtocols = allProtocols.filter(p => p.patientId === formData.patientId);
         
@@ -316,16 +287,15 @@ export default function AppointmentEditor({
               const protocolDetails = await protocolApi.getById(p.protocolId);
               return { ...p, protocol: protocolDetails };
             } catch (e) {
-              console.error(`Erro ao buscar detalhes do protocolo ${p.protocolId}`, e);
               return p; // Retorna o protocolo do paciente mesmo se os detalhes falharem
             }
           })
         );
+        
         setPatientProtocols(enriched);
         setServiceSessions(allSessions);
       })
       .catch(error => {
-        console.error("Erro ao carregar protocolos ou sessões do paciente:", error);
         toast({
           title: "Erro ao carregar dados",
           description: "Não foi possível carregar os protocolos e sessões do paciente.",
@@ -342,57 +312,6 @@ export default function AppointmentEditor({
       setServiceSessions([]);
     }
   }, [formData.patientId, toast]);
-
-  const loadDoctorsAndUsers = async () => {
-    try {
-      // Carregar médicos (usuários com role 'health_professional')
-      const doctorsResponse = await userApi.list({ role: 'health_professional' });
-      if (Array.isArray(doctorsResponse)) {
-        setAvailableDoctors(doctorsResponse);
-      } else {
-        console.error('Resposta inválida ao carregar médicos:', doctorsResponse);
-        setAvailableDoctors([]);
-      }
-
-      // Carregar todos os usuários para o profissional solicitante
-      const usersResponse = await userApi.list();
-      if (Array.isArray(usersResponse)) {
-        setAvailableUsers(usersResponse);
-      } else {
-        console.error('Resposta inválida ao carregar usuários:', usersResponse);
-        setAvailableUsers([]);
-      }
-    } catch (error) {
-      console.error('Erro ao carregar usuários:', error);
-      setAvailableDoctors([]);
-      setAvailableUsers([]);
-    }
-  };
-
-  const loadUnits = async () => {
-    try {
-      const response = await supplierApi.getSuppliers({ category: 'unidade' });
-      setUnits(response);
-    } catch (error) {
-      console.error('Erro ao carregar unidades:', error);
-      setUnits([]);
-    }
-  };
-
-  const handlePatientSelect = (patientId) => {
-    setFormData((prev) => ({ ...prev, patientId }));
-    const selectedPatient = patients.find((p) => p.id === patientId);
-    if (selectedPatient) {
-      setPatientDetailsFormData({
-        name: selectedPatient.name,
-        email: selectedPatient.email,
-        phone: selectedPatient.phone,
-        birthDate: selectedPatient.birthDate,
-        cpf: selectedPatient.cpf,
-        rg: selectedPatient.rg,
-      });
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -478,9 +397,6 @@ export default function AppointmentEditor({
         payload.observation = String(formData.observation);
       }
       
-      // Log para debug
-      console.log('Payload enviado:', payload);
-      
       if (typeof formData.patientProtocolId !== 'undefined' && formData.patientProtocolId !== '') {
         payload.patientProtocolId = String(formData.patientProtocolId);
       }
@@ -534,27 +450,6 @@ export default function AppointmentEditor({
   // SESSÕES UTILIZADAS POR PROTOCOLO
   const getSessionsForProtocol = (protocolId: string): PatientServiceSession[] =>
     serviceSessions.filter((s: PatientServiceSession) => s.patientProtocolId === protocolId);
-
-  // SESSÕES DISPONÍVEIS (NÃO UTILIZADAS)
-  const getAvailableSessions = (protocolId: string) => {
-    const protocol = patientProtocols.find(p => p.id === protocolId);
-    if (!protocol || !protocol.protocol?.services) return [];
-    const sessions = protocol.protocol.services.flatMap(service => {
-      const total = typeof service.numberOfSessions === 'string' ? Number(service.numberOfSessions) : service.numberOfSessions || 0;
-      const used = getSessionsForProtocol(protocolId).filter(s => s.protocolServiceId === String(service.id) && (s.status === 'completed' || s.status === 'scheduled')).length;
-      let serviceName: string = '';
-      if ('name' in service && typeof service.name === 'string') serviceName = service.name;
-      else if ('service' in service && service.service && typeof service.service.name === 'string') serviceName = service.service.name;
-      else if ('Service' in service && service.Service && typeof service.Service.name === 'string') serviceName = service.Service.name;
-      return Array.from({ length: total }, (_, i) => ({
-        serviceId: String(service.id),
-        serviceName,
-        sessionNumber: String(i + 1),
-        used: i < used,
-      }));
-    });
-    return sessions;
-  };
 
   const filteredProtocols = protocolSearch.trim()
     ? protocolsAvailable.filter(p => p.name.toLowerCase().includes(protocolSearch.toLowerCase()))
@@ -655,26 +550,6 @@ export default function AppointmentEditor({
     } catch (error) {
       toast({ title: 'Erro ao selecionar sessão', description: error?.message || JSON.stringify(error), variant: 'destructive' });
     }
-  }
-
-  // Função para buscar próximo horário disponível (simulação)
-  function getNextAvailableSlot(doctorId) {
-    // Aqui você pode integrar com sua API real de agenda
-    // Simulação: retorna o próximo horário inteiro disponível hoje
-    const now = new Date();
-    const nextHour = now.getHours() + 1;
-    if (nextHour > 17) {
-      // Se já passou do horário comercial, sugere amanhã às 8h
-      const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-      return {
-        date: tomorrow.toISOString().split('T')[0],
-        startTime: '08:00',
-      };
-    }
-    return {
-      date: now.toISOString().split('T')[0],
-      startTime: `${String(nextHour).padStart(2, '0')}:00`,
-    };
   }
 
   return (
@@ -1100,12 +975,28 @@ export default function AppointmentEditor({
                                 <div className="space-y-3">
                                 {(protocol.protocol?.protocolServices || []).map(ps => {
                                   const total = Number(ps.numberOfSessions) || 0;
-                                  const used = getSessionsForProtocol(protocol.id).filter(s => s.protocolServiceId === String(ps.serviceId) && (s.status === 'completed' || s.status === 'scheduled')).length;
+                                  
+                                  // Contar apenas as sessões DESTE serviço específico
+                                  const sessionsForThisService = serviceSessions.filter(s => 
+                                    String(s.protocolServiceId) === String(ps.id) && 
+                                    String(s.patientProtocolId) === String(protocol.id)
+                                  );
+                                  
+                                  // Contar quantas dessas sessões estão completed ou scheduled
+                                  const used = sessionsForThisService.filter(s => 
+                                    s.status === 'completed' || s.status === 'scheduled'
+                                  ).length;
+                                  
+                                  // Para mostrar a posição atual, pegar o maior sessionNumber + 1
+                                  const currentPosition = sessionsForThisService.length > 0 
+                                    ? Math.max(...sessionsForThisService.map(s => s.sessionNumber))
+                                    : 1;
+                                  
                                   return (
                                       <div key={ps.id} className="flex flex-col gap-0.5">
                                         <div className="flex items-center justify-between">
                                           <span className="text-sm font-medium text-foreground">{ps.service?.name}</span>
-                                          <span className="text-xs text-muted-foreground">{used}/{total}</span>
+                                          <span className="text-xs text-muted-foreground">{currentPosition}/{total}</span>
                                       </div>
                                         <div className="flex gap-1 mt-0.5">
                                           {(() => {
@@ -1114,42 +1005,88 @@ export default function AppointmentEditor({
                                             const sessionsForService = serviceSessions.filter(
                                               s => String(s.protocolServiceId) === serviceId && String(s.patientProtocolId) === protocolId
                                             );
+                                            
                                             if (loadingServiceSessions) {
                                               return <span className="text-xs text-muted-foreground">Carregando sessões...</span>;
                                             }
+                                            
                                             if (sessionsForService.length === 0) {
                                               return <span className="text-xs text-muted-foreground">Nenhuma sessão encontrada</span>;
                                             }
-                                            return sessionsForService.map((session) => {
-                                              const isUsed = session.status === 'completed';
+                                            
+                                            // Pegar a primeira (e única) sessão para este serviço
+                                            const session = sessionsForService[0];
+                                            const totalSessions = session.totalSessions;
+                                            
+                                            // Criar mapa de sessões por número
+                                            const sessionMap = new Map();
+                                            sessionsForService.forEach(s => {
+                                              sessionMap.set(s.sessionNumber, s);
+                                            });
+                                            
+                                            // Encontrar a próxima sessão disponível
+                                            let nextAvailableSession = 1;
+                                            for (let i = 1; i <= totalSessions; i++) {
+                                              if (!sessionMap.has(i)) {
+                                                nextAvailableSession = i;
+                                                break;
+                                              }
+                                              if (sessionMap.get(i).status !== 'completed') {
+                                                nextAvailableSession = i + 1;
+                                                break;
+                                              }
+                                            }
+                                            
+                                            // Criar array de círculos baseado no totalSessions
+                                            return Array.from({ length: totalSessions }, (_, index) => {
+                                              const sessionNumber = index + 1;
+                                              const sessionData = sessionMap.get(sessionNumber);
+                                              
+                                              // Determinar o status da sessão
+                                              let isCompleted = sessionData && sessionData.status === 'completed';
+                                              let isScheduled = sessionData && sessionData.status === 'scheduled';
+                                              let canSchedule = !sessionData && sessionNumber === nextAvailableSession;
+                                              
                                               const isSelected =
                                                 selectedSession &&
                                                 String(selectedSession.protocolId) === protocolId &&
                                                 String(selectedSession.serviceId) === serviceId &&
-                                                Number(selectedSession.sessionNumber) === Number(session.sessionNumber);
+                                                Number(selectedSession.sessionNumber) === sessionNumber;
+                                              
                                               return (
                                                 <span
-                                                  key={serviceId + '-' + session.sessionNumber}
+                                                  key={serviceId + '-' + sessionNumber}
                                                   className={
                                                     'inline-block w-4 h-4 rounded-full transition ' +
-                                                    (isUsed
-                                                      ? 'bg-green-500'
-                                                      : isSelected
-                                                        ? 'bg-blue-500 ring-2 ring-blue-300 cursor-pointer'
-                                                        : 'bg-muted border border-gray-300 cursor-pointer hover:bg-blue-400')
+                                                    (isCompleted
+                                                      ? 'bg-green-500' // Verde para completadas
+                                                      : isScheduled
+                                                        ? 'bg-yellow-500' // Amarelo para agendadas
+                                                        : isSelected
+                                                          ? 'bg-blue-500 ring-2 ring-blue-300 cursor-pointer'
+                                                          : canSchedule
+                                                            ? 'bg-muted border border-gray-300 cursor-pointer hover:bg-blue-400' // Disponível para agendamento
+                                                            : 'bg-gray-200 cursor-not-allowed') // Bloqueada
                                                   }
-                                                  title={isUsed ? 'Sessão utilizada' : loadingServiceSessions ? 'Carregando sessões...' : 'Clique para agendar esta sessão'}
+                                                  title={
+                                                    isCompleted
+                                                      ? `Sessão ${sessionNumber} completada`
+                                                      : isScheduled
+                                                        ? `Sessão ${sessionNumber} agendada`
+                                                        : canSchedule
+                                                          ? `Clique para agendar a sessão ${sessionNumber}`
+                                                          : `Sessão ${sessionNumber} bloqueada - complete as anteriores primeiro`
+                                                  }
                                                   onClick={() => {
-                                                    if (!isUsed && !loadingServiceSessions && serviceSessions.length > 0) {
-                                                      handleMarkSession(protocol, ps, session.sessionNumber);
+                                                    if (canSchedule && !loadingServiceSessions) {
+                                                      handleMarkSession(protocol, ps, sessionNumber);
                                                     }
                                                   }}
-                                                  style={{ cursor: isUsed || loadingServiceSessions || serviceSessions.length === 0 ? 'not-allowed' : 'pointer', opacity: loadingServiceSessions || serviceSessions.length === 0 ? 0.5 : 1 }}
                                                 />
                                               );
                                             });
                                           })()}
-                                      </div>
+                                        </div>
                                     </div>
                                   );
                                 })}

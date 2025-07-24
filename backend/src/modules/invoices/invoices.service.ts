@@ -8,8 +8,10 @@ import { Repository, DataSource, ILike } from 'typeorm';
 import { Invoice } from './entities/invoice.entity';
 import { InvoiceItem } from './entities/invoice-item.entity';
 import { InvoicePayment } from './entities/invoice-payment.entity';
+import { Transaction } from '../transactions/entities/transaction.entity'; // Adicionar esta linha
 
 import { PatientProtocolsService } from '../patient-protocols/patient-protocols.service';
+import { TransactionsService } from '../transactions/transactions.service';
 
 @Injectable()
 export class InvoicesService {
@@ -22,6 +24,7 @@ export class InvoicesService {
     private readonly invoicePaymentRepository: Repository<InvoicePayment>,
     private readonly dataSource: DataSource,
     private readonly patientProtocolsService: PatientProtocolsService,
+    private readonly transactionsService: TransactionsService,
   ) {}
 
   async generateInvoiceNumber(type: string): Promise<string> {
@@ -363,4 +366,101 @@ export class InvoicesService {
       paymentStatus,
     };
   }
-} 
+
+  // Método para processar pagamento (sem transaction por enquanto)
+  async processInvoicePayment(invoiceId: string, paymentData: {
+    amount: number;
+    paymentMethodId: string;
+    paymentMethodName: string;
+    description?: string;
+    userId: string;
+    dueDate: Date;
+    installments?: number;
+    cardBrand?: string;
+  }) {
+    return this.dataSource.transaction(async (manager) => {
+      const invoice = await manager.findOne(Invoice, {
+        where: { id: invoiceId },
+        relations: ['payments']
+      });
+      
+      if (!invoice) {
+        throw new NotFoundException('Fatura não encontrada');
+      }
+      
+      // Criar o InvoicePayment (como já funciona)
+      const invoicePayment = manager.create(InvoicePayment, {
+        invoice: invoice,
+        paymentMethodId: paymentData.paymentMethodId,
+        paymentMethodName: paymentData.paymentMethodName,
+        dueDate: paymentData.dueDate,
+        description: paymentData.description,
+        installments: paymentData.installments || 1,
+        installmentValue: paymentData.amount.toFixed(2),
+        totalValue: paymentData.amount.toFixed(2),
+        cardBrand: paymentData.cardBrand
+      });
+      
+      await manager.save(invoicePayment);
+      
+      // Calcular status da fatura
+      const updatedInvoice = await this.getInvoicePaymentStatus(invoiceId);
+      
+      return {
+        invoicePayment,
+        invoiceStatus: updatedInvoice
+      };
+    });
+  }
+
+  // Método simplificado para verificar status de pagamento
+  async getInvoicePaymentStatus(invoiceId: string) {
+    const invoice = await this.invoiceRepository.findOne({
+      where: { id: invoiceId },
+      relations: ['payments', 'patient']
+    });
+    
+    if (!invoice) {
+      throw new NotFoundException('Fatura não encontrada');
+    }
+    
+    // Calcular total pago somando todos os InvoicePayments
+    const totalPaid = invoice.payments.reduce((sum, payment) => {
+      return sum + parseFloat(payment.totalValue);
+    }, 0);
+    
+    const totalInvoice = parseFloat(invoice.total);
+    const remaining = totalInvoice - totalPaid;
+    
+    // Determinar status
+    let paymentStatus = 'unpaid';
+    if (totalPaid > 0 && remaining > 0) {
+      paymentStatus = 'partial';
+    } else if (remaining <= 0) {
+      paymentStatus = 'paid';
+      // Atualizar status da invoice
+      invoice.status = 'paid';
+      await this.invoiceRepository.save(invoice);
+    }
+    
+    return {
+      invoice: {
+        id: invoice.id,
+        number: invoice.number,
+        patient: invoice.patient,
+        total: totalInvoice,
+        totalPaid: totalPaid,
+        remaining: Math.max(0, remaining),
+        paymentStatus,
+        status: invoice.status
+      },
+      payments: invoice.payments,
+      summary: {
+        isFullyPaid: remaining <= 0,
+        needsMorePayment: remaining > 0,
+        paymentPercentage: totalInvoice > 0 ? (totalPaid / totalInvoice) * 100 : 0,
+        numberOfPayments: invoice.payments.length
+      }
+    };
+  }
+}

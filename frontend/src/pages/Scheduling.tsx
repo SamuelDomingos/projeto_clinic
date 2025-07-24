@@ -15,6 +15,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { appointmentApi, userApi, type Appointment, type User, attendanceScheduleApi } from '../lib/api';
 import type { AttendanceSchedule } from '../lib/api/types/attendanceSchedule';
 import AppointmentEditor from "@/components/AppointmentEditor/AppointmentEditor";
+import AppointmentEditorCard from "@/components/AppointmentEditor/AppointmentEditorCard";
 import { Badge } from "@/components/ui/badge";
 import { useScheduleConfig } from '@/contexts/ScheduleConfigContext';
 import ScheduleView from '@/components/Scheduling/ScheduleView';
@@ -24,11 +25,12 @@ export default function Scheduling() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [editingAppointment, setEditingAppointment] = useState<AttendanceSchedule | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [isNewAppointment, setIsNewAppointment] = useState(false);
   const [loading, setLoading] = useState(false);
   const [schedules, setSchedules] = useState<AttendanceSchedule[]>([]);
   const [healthProfessionals, setHealthProfessionals] = useState<User[]>([]);
   const [allUsers, setAllUsers] = useState<User[]>([]);
-  const [selectedDoctors, setSelectedDoctors] = useState<string[]>([]);
+  const [selectedDoctors, setSelectedDoctors] = useState<string[]>([]); // ADICIONAR ESTA LINHA
   const { toast } = useToast();
   const { config, hours, loading: loadingConfig } = useScheduleConfig();
 
@@ -117,11 +119,14 @@ export default function Scheduling() {
     loadSchedules();
   }, [selectedDoctors, loadSchedules]);
 
+  // Remover as importações incorretas das linhas 121-122
+  // e adicionar o estado isNewAppointment
+
   const handleNewAppointment = (date?: string, startTime?: string) => {
     setEditingAppointment({
       id: '',
       patientId: '',
-      userId: selectedDoctors[0] || '', // Alterado de professionalId para userId
+      userId: selectedDoctors[0] || '',
       unitId: '',
       date: date || new Date().toISOString().split('T')[0],
       startTime: startTime || '',
@@ -132,11 +137,13 @@ export default function Scheduling() {
       createdAt: '',
       updatedAt: '',
     });
+    setIsNewAppointment(true); // Marcar como novo agendamento
     setIsEditorOpen(true);
   };
 
   const handleEditAppointment = (appt: AttendanceSchedule) => {
     setEditingAppointment(appt);
+    setIsNewAppointment(false); // Marcar como edição
     setIsEditorOpen(true);
   };
 
@@ -221,8 +228,8 @@ export default function Scheduling() {
         />
       )}
 
-      {/* Editor de agendamentos */}
-      {isEditorOpen && editingAppointment && (
+      {/* Editor de agendamentos - usar AppointmentEditor para NOVOS agendamentos */}
+      {isEditorOpen && editingAppointment && isNewAppointment && (
         <AppointmentEditor
           appointment={{
             id: editingAppointment.id,
@@ -230,7 +237,7 @@ export default function Scheduling() {
             doctorId: editingAppointment.userId,
             date: editingAppointment.date,
             startTime: editingAppointment.startTime,
-            endTime: editingAppointment.endTime, // Adicionado
+            endTime: editingAppointment.endTime,
             duration: 30,
             procedure: '',
             status: 'scheduled',
@@ -249,14 +256,17 @@ export default function Scheduling() {
             doctor: undefined,
             createdAt: editingAppointment.createdAt,
             updatedAt: editingAppointment.updatedAt,
-            unit: editingAppointment.unit, // Adicionado
-            attendanceType: editingAppointment.attendanceType, // Adicionado
-            patientProtocol: editingAppointment.protocol, // Adicionado (usando protocol em vez de patientProtocol)
-            serviceSession: editingAppointment.serviceSession, // Adicionado
-            isBlocked: editingAppointment.isBlocked // Adicionado
+            unit: editingAppointment.unit,
+            attendanceType: editingAppointment.attendanceType,
+            patientProtocol: editingAppointment.protocol,
+            serviceSession: editingAppointment.serviceSession,
+            isBlocked: editingAppointment.isBlocked
           }}
           isOpen={isEditorOpen}
-          onClose={() => setIsEditorOpen(false)}
+          onClose={() => {
+            setIsEditorOpen(false);
+            setIsNewAppointment(false);
+          }}
           onSave={async (appt) => {
             const data = {
               ...editingAppointment,
@@ -273,6 +283,41 @@ export default function Scheduling() {
               await attendanceScheduleApi.create(data);
             }
             setIsEditorOpen(false);
+            setIsNewAppointment(false);
+            loadSchedules();
+          }}
+          doctors={healthProfessionals}
+          allUsers={allUsers}
+          patientId={editingAppointment.patientId}
+        />
+      )}
+      
+      {/* AppointmentEditorCard para EDITAR agendamentos existentes (clique nos cards) */}
+      {isEditorOpen && editingAppointment && !isNewAppointment && (
+        <AppointmentEditorCard
+          isOpen={isEditorOpen}
+          onClose={() => {
+            setIsEditorOpen(false);
+            setIsNewAppointment(false);
+          }}
+          appointment={editingAppointment}
+          onSave={async (appt) => {
+            const data = {
+              ...editingAppointment,
+              professionalId: appt.doctorId,
+              patientId: appt.patientId,
+              date: appt.date,
+              startTime: appt.startTime,
+              endTime: appt.endTime,
+              observation: appt.notes,
+            };
+            if (editingAppointment.id) {
+              await attendanceScheduleApi.update(editingAppointment.id, data);
+            } else {
+              await attendanceScheduleApi.create(data);
+            }
+            setIsEditorOpen(false);
+            setIsNewAppointment(false);
             loadSchedules();
           }}
           doctors={healthProfessionals}

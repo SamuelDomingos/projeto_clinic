@@ -82,4 +82,4 @@ export class ProtocolsService {
     await this.protocolRepository.remove(protocol);
     return { success: true };
   }
-} 
+}

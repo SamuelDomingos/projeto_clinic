@@ -7,14 +7,16 @@ import { InvoicesController } from './invoices.controller';
 import { InvoiceItem } from './entities/invoice-item.entity';
 import { InvoicePayment } from './entities/invoice-payment.entity';
 import { PatientProtocolsModule } from '../patient-protocols/patient-protocols.module';
+import { TransactionsModule } from '../transactions/transactions.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Invoice, InvoiceItem, InvoicePayment, Patient]),
     PatientProtocolsModule,
+    TransactionsModule,
   ],
   controllers: [InvoicesController],
   providers: [InvoicesService],
   exports: [InvoicesService],
 })
-export class InvoicesModule {} 
+export class InvoicesModule {}

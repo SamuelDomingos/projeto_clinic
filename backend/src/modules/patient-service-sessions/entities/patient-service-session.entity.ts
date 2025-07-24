@@ -5,8 +5,6 @@ import { ProtocolService } from '../../protocol-services/entities/protocol-servi
 export type PatientServiceSessionStatus =
   | 'scheduled'
   | 'completed'
-  | 'cancelled'
-  | 'missed';
 
 @Entity('patientservicesessions')
 export class PatientServiceSession {
