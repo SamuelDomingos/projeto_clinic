@@ -49,12 +49,7 @@ export class TransactionsController {
     const userId = req.user?.id;
     if (!userId) throw new BadRequestException('Usuário não autenticado.');
     
-    // Validação condicional: apenas para despesas com boleto
-    if (body.type === 'expense' && body.paymentMethod === 'boleto') {
-      if (!file && !body.boletoNumber) {
-        throw new BadRequestException('Para despesas com boleto, é obrigatório enviar o arquivo do boleto ou o número do boleto.');
-      }
-    }
+    // Validação de boleto removida
     
     const data = { ...body };
     if (file) {

@@ -1,6 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
-import { PaymentMethod } from '../../payment-methods/entities/payment-method.entity';
+// Remova esta linha:
+// import { PaymentMethod } from '../../payment-methods/entities/payment-method.entity';
 import { Category } from '../../categories/entities/category.entity';
 import { Supplier } from '../../suppliers/entities/supplier.entity';
 
@@ -21,8 +22,12 @@ export class Transaction {
   @Column()
   description: string;
 
-  @ManyToOne(() => PaymentMethod)
-  paymentMethod: PaymentMethod;
+  // MUDANÇA: De relacionamento para string
+  @Column({ type: 'varchar', nullable: true })
+  paymentMethod: string;
+
+  @Column({ nullable: true })
+  category: string;
 
   @ManyToOne(() => Category)
   @JoinColumn({ name: 'category' })

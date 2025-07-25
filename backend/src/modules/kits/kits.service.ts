@@ -140,8 +140,8 @@ export class KitsService {
           reason: `${data.reason} (Kit: ${kit.name})`,
         }, data.userId);
         
-        // Adicionar o resultado ao array
-        results.push(...result); // Usando spread operator para adicionar todos os elementos do array
+        // Corrigir esta linha - usar spread operator:
+        results.push(...result);
       } catch (error) {
         errors.push({
           productId: item.productId,

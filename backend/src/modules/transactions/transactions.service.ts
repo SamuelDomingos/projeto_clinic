@@ -17,6 +17,7 @@ export class TransactionsService {
         throw new Error('Para despesas com boleto, o arquivo do boleto ou número do boleto é obrigatório.');
       }
     }
+    // Validação de boleto removida
 
     const transaction = this.transactionRepository.create({
       ...data,
