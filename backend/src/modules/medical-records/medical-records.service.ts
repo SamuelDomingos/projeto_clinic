@@ -111,6 +111,21 @@ export class MedicalRecordsService {
     return this.medicalRecordRepository.findOne({ where: { id: recordId } });
   }
 
+  async uploadPhoto(recordId: string, photoPath: string) {
+      const record = await this.medicalRecordRepository.findOne({ where: { id: recordId } });
+      if (!record) throw new NotFoundException('Medical record not found');
+      const updatedAttachments = record.attachments ? [...record.attachments, photoPath] : [photoPath];
+      await this.medicalRecordRepository.update(recordId, { attachments: updatedAttachments });
+      return this.medicalRecordRepository.findOne({ where: { id: recordId } });
+  }
+
+  async generateReport(recordId: string): Promise<string> {
+      const record = await this.medicalRecordRepository.findOne({ where: { id: recordId }, relations: ['patient', 'doctor'] });
+      if (!record) throw new NotFoundException('Medical record not found');
+      const report = `Relatório Médico\n\nPaciente: ${record.patient.name}\nMédico: ${record.doctor.name}\nData: ${record.date}\nCategoria: ${record.recordCategory}\nConteúdo:\n${record.content}`;
+      return report;
+  }
+
   create(data: any, userId: string) {
     return this.createRecord(data, userId);
   }
@@ -132,4 +147,4 @@ export class MedicalRecordsService {
   }
 
   // Métodos para upload de foto, gerar relatório, etc., podem ser implementados conforme a infra disponível
-} 
+}

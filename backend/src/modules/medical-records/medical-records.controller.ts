@@ -86,4 +86,16 @@ export class MedicalRecordsController {
   async remove(@Param('id') id: string, @Req() req) {
     return this.medicalRecordsService.remove(id, req.user.id);
   }
+
+  @Get('patients/:patientId/timeline')
+  @ApiOperation({ summary: 'Get patient timeline' })
+  @ApiResponse({ status: 200, description: 'Patient timeline retrieved successfully.' })
+  @ApiResponse({ status: 404, description: 'Patient not found.' })
+  @ApiParam({ name: 'patientId', description: 'ID do paciente', type: String, example: '60d0fe4f5e2a7b001c8e4a1b' })
+  @ApiQuery({ name: 'recordCategory', required: false, type: String, description: 'Filtrar por categoria de registro' })
+  @ApiQuery({ name: 'startDate', required: false, type: String, format: 'date', description: 'Filtrar por data inicial' })
+  @ApiQuery({ name: 'endDate', required: false, type: String, format: 'date', description: 'Filtrar por data final' })
+  async getPatientTimeline(@Param('patientId') patientId: string, @Query() query: any, @Req() req) {
+      return this.medicalRecordsService.getPatientTimeline(patientId, query, req.user?.id);
+  }
 }

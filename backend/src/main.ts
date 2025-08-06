@@ -5,6 +5,13 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // Habilitar CORS
+  app.enableCors({
+    origin: 'http://192.168.15.118:8080', // Substitua pelo endereço do seu frontend
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE', // Métodos HTTP permitidos
+    credentials: true, // Permite o envio de cookies e cabeçalhos de autorização
+  });
+
   const config = new DocumentBuilder()
     .setTitle('Clinic API')
     .setDescription('The clinic API description')
