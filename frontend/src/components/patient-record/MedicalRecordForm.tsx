@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus } from "lucide-react";
-import { medicalRecordApi, type MedicalRecord } from "@/lib/api";
+import { medicalRecordApi } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 
 interface MedicalRecordFormProps {
@@ -15,15 +15,13 @@ interface MedicalRecordFormProps {
   trigger?: React.ReactNode;
 }
 
-type RecordType = MedicalRecord['type'];
-type RecordStatus = MedicalRecord['status'];
+type RecordCategory = 'observation' | 'evolution' | 'private_note' | 'attachment' | 'prescription' | 'exam_request';
 
 interface FormData {
-  type: RecordType;
+  recordCategory: RecordCategory;
   procedure: string;
-  doctorName: string;
+  doctorId: string;
   notes: string;
-  status: RecordStatus;
 }
 
 export function MedicalRecordForm({ patientId, onSuccess, trigger }: MedicalRecordFormProps) {
@@ -32,11 +30,10 @@ export function MedicalRecordForm({ patientId, onSuccess, trigger }: MedicalReco
   const { toast } = useToast();
 
   const [formData, setFormData] = useState<FormData>({
-    type: 'consultation',
+    recordCategory: 'observation',
     procedure: '',
-    doctorName: '',
-    notes: '',
-    status: 'scheduled'
+    doctorId: '',
+    notes: ''
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -44,10 +41,14 @@ export function MedicalRecordForm({ patientId, onSuccess, trigger }: MedicalReco
     setLoading(true);
 
     try {
-      await medicalRecordApi.createRecord({
+      await medicalRecordApi.create({
         ...formData,
         patientId,
-        date: new Date().toISOString()
+        date: new Date().toISOString(),
+        content: `${formData.procedure} - ${formData.notes}`,
+        doctorId: formData.doctorId,
+        isPrivate: false, // Valor padrão
+        createdBy: 'system' // Valor padrão, ajuste conforme necessário
       });
 
       toast({
@@ -70,12 +71,7 @@ export function MedicalRecordForm({ patientId, onSuccess, trigger }: MedicalReco
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        {trigger || (
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            Novo Registro
-          </Button>
-        )}
+        {trigger || <Button variant="outline" size="sm"><Plus className="h-4 w-4 mr-2" /> Novo Registro</Button>}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
@@ -83,18 +79,21 @@ export function MedicalRecordForm({ patientId, onSuccess, trigger }: MedicalReco
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="type">Tipo de Registro</Label>
+            <Label htmlFor="recordCategory">Categoria do Registro</Label>
             <Select
-              value={formData.type}
-              onValueChange={(value: RecordType) => setFormData({ ...formData, type: value })}
+              value={formData.recordCategory}
+              onValueChange={(value: RecordCategory) => setFormData({ ...formData, recordCategory: value })}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Selecione o tipo" />
+                <SelectValue placeholder="Selecione a categoria" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="consultation">Consulta</SelectItem>
-                <SelectItem value="procedure">Procedimento</SelectItem>
-                <SelectItem value="examination">Exame</SelectItem>
+                <SelectItem value="observation">Observação</SelectItem>
+                <SelectItem value="evolution">Evolução</SelectItem>
+                <SelectItem value="private_note">Nota Privada</SelectItem>
+                <SelectItem value="attachment">Anexo</SelectItem>
+                <SelectItem value="prescription">Prescrição</SelectItem>
+                <SelectItem value="exam_request">Solicitação de Exame</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -110,11 +109,11 @@ export function MedicalRecordForm({ patientId, onSuccess, trigger }: MedicalReco
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="doctorName">Nome do Médico</Label>
+            <Label htmlFor="doctorId">ID do Médico</Label>
             <Input
-              id="doctorName"
-              value={formData.doctorName}
-              onChange={(e) => setFormData({ ...formData, doctorName: e.target.value })}
+              id="doctorId"
+              value={formData.doctorId}
+              onChange={(e) => setFormData({ ...formData, doctorId: e.target.value })}
               required
             />
           </div>
@@ -129,23 +128,6 @@ export function MedicalRecordForm({ patientId, onSuccess, trigger }: MedicalReco
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="status">Status</Label>
-            <Select
-              value={formData.status}
-              onValueChange={(value: RecordStatus) => setFormData({ ...formData, status: value })}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione o status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="scheduled">Agendado</SelectItem>
-                <SelectItem value="completed">Concluído</SelectItem>
-                <SelectItem value="cancelled">Cancelado</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
           <div className="flex justify-end space-x-2">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancelar
@@ -158,4 +140,4 @@ export function MedicalRecordForm({ patientId, onSuccess, trigger }: MedicalReco
       </DialogContent>
     </Dialog>
   );
-} 
+}

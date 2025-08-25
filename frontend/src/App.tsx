@@ -34,6 +34,7 @@ import QuestionForm from "./pages/Health/Question/QuestionForm";
 import Schedule from "./pages/settings/Schedule";
 import ExecutorConfig from './pages/settings/ExecutorConfig';
 import { ScheduleConfigProvider } from "./contexts/ScheduleConfigContext";
+import { FloatingHelpDesk } from "./components/help-desk/floating-help-desk";
 // import Management from "./pages/Management/Management"; // Quando o arquivo existir
 
 const queryClient = new QueryClient();
@@ -54,7 +55,12 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" />;
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      {children}
+      <FloatingHelpDesk />
+    </>
+  );
 }
 
 const AppRoutes = () => {

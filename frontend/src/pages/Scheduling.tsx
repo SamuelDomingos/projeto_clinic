@@ -12,18 +12,26 @@ import {
 import { ptBR } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
-import { appointmentApi, userApi, type Appointment, type User, attendanceScheduleApi } from '../lib/api';
-import type { AttendanceSchedule } from '../lib/api/types/attendanceSchedule';
+import {
+  appointmentApi,
+  userApi,
+  type Appointment,
+  type User,
+  attendanceScheduleApi,
+} from "../lib/api";
+import type { AttendanceSchedule } from "../lib/api/types/attendanceSchedule";
 import AppointmentEditor from "@/components/AppointmentEditor/AppointmentEditor";
 import AppointmentEditorCard from "@/components/AppointmentEditor/AppointmentEditorCard";
 import { Badge } from "@/components/ui/badge";
-import { useScheduleConfig } from '@/contexts/ScheduleConfigContext';
-import ScheduleView from '@/components/Scheduling/ScheduleView';
+import { useScheduleConfig } from "@/contexts/ScheduleConfigContext";
+import ScheduleView from "@/components/Scheduling/ScheduleView";
+import { SchedulingHeader } from "@/components/Scheduling";
 
 export default function Scheduling() {
   const [weekOffset, setWeekOffset] = useState(0);
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [editingAppointment, setEditingAppointment] = useState<AttendanceSchedule | null>(null);
+  const [editingAppointment, setEditingAppointment] =
+    useState<AttendanceSchedule | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isNewAppointment, setIsNewAppointment] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -40,28 +48,28 @@ export default function Scheduling() {
       setSelectedDoctors([healthProfessionals[0].id]);
     }
   }, [healthProfessionals, selectedDoctors.length]); // Adicionar as dependências
-  
+
   const loadHealthProfessionals = useCallback(async () => {
     try {
       const response = await userApi.list();
-      const professionals = (response as User[]).filter(user => {
-        return user.role === 'health_professional' && user.status === 'active';
+      const professionals = (response as User[]).filter((user) => {
+        return user.role === "health_professional" && user.status === "active";
       });
       setHealthProfessionals(professionals);
-      
+
       if (professionals.length === 0) {
         toast({
           title: "Aviso",
           description: "Nenhum profissional de saúde ativo encontrado",
-          variant: "default"
+          variant: "default",
         });
       }
     } catch (error) {
-      console.error('Erro ao carregar profissionais:', error);
+      console.error("Erro ao carregar profissionais:", error);
       toast({
         title: "Erro",
         description: "Não foi possível carregar os profissionais",
-        variant: "destructive"
+        variant: "destructive",
       });
     }
   }, [toast]);
@@ -74,7 +82,7 @@ export default function Scheduling() {
       toast({
         title: "Erro",
         description: "Não foi possível carregar os usuários",
-        variant: "destructive"
+        variant: "destructive",
       });
     }
   }, [toast]);
@@ -90,15 +98,15 @@ export default function Scheduling() {
         endOfWeek(currentDate, { locale: ptBR }),
         "yyyy-MM-dd"
       );
-      
+
       const schedulesList = await attendanceScheduleApi.list({
         startDate: start,
         endDate: end,
       });
-      
+
       setSchedules(schedulesList);
     } catch (error) {
-      console.error('Erro ao carregar schedules:', error);
+      console.error("Erro ao carregar schedules:", error);
       toast({
         title: "Erro",
         description: "Não foi possível carregar os agendamentos.",
@@ -124,18 +132,18 @@ export default function Scheduling() {
 
   const handleNewAppointment = (date?: string, startTime?: string) => {
     setEditingAppointment({
-      id: '',
-      patientId: '',
-      userId: selectedDoctors[0] || '',
-      unitId: '',
-      date: date || new Date().toISOString().split('T')[0],
-      startTime: startTime || '',
-      endTime: '',
-      attendanceType: 'avulso',
+      id: "",
+      patientId: "",
+      userId: selectedDoctors[0] || "",
+      unitId: "",
+      date: date || new Date().toISOString().split("T")[0],
+      startTime: startTime || "",
+      endTime: "",
+      attendanceType: "avulso",
       value: null,
       isBlocked: false,
-      createdAt: '',
-      updatedAt: '',
+      createdAt: "",
+      updatedAt: "",
     });
     setIsNewAppointment(true); // Marcar como novo agendamento
     setIsEditorOpen(true);
@@ -164,56 +172,35 @@ export default function Scheduling() {
   const handleWeekChange = (newOffset: number) => {
     setWeekOffset(newOffset);
     const direction = newOffset > weekOffset ? 1 : -1;
-    setCurrentDate(prev => direction > 0 ? addWeeks(prev, 1) : subWeeks(prev, 1));
+    setCurrentDate((prev) =>
+      direction > 0 ? addWeeks(prev, 1) : subWeeks(prev, 1)
+    );
   };
 
   // Calcular os dias da semana baseados no contexto
   const weekDays = config?.workingDays || [
-    'Segunda-Feira',
-    'Terça-Feira',
-    'Quarta-Feira',
-    'Quinta-Feira',
-    'Sexta-Feira',
-    'Sábado',
-    'Domingo',
+    "Segunda-Feira",
+    "Terça-Feira",
+    "Quarta-Feira",
+    "Quinta-Feira",
+    "Sexta-Feira",
+    "Sábado",
+    "Domingo",
   ];
 
   return (
     <div className="container mx-auto py-6">
       <h1 className="text-2xl md:text-3xl font-bold mb-1">Agenda</h1>
-      <div className="text-gray-500 mb-6">Gerencie os agendamentos e bloqueios dos profissionais de saúde.</div>
       
-      <div className="bg-white dark:bg-background rounded shadow p-4 mb-6">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          
-          {/* Seleção de profissionais */}
-          <div className="flex flex-wrap gap-2">
-            {healthProfessionals.map(doctor => (
-              <Badge 
-                key={doctor.id} 
-                variant={selectedDoctors.includes(doctor.id) ? "default" : "outline"}
-                className="cursor-pointer"
-                onClick={() => handleDoctorSelection(doctor.id)}
-              >
-                {doctor.name}
-              </Badge>
-            ))}
-            {healthProfessionals.length > 0 && (
-              <Badge 
-                variant="secondary" 
-                className="cursor-pointer"
-                onClick={handleSelectAllDoctors}
-              >
-                {selectedDoctors.length === healthProfessionals.length ? "Limpar" : "Todos"}
-              </Badge>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Componente de visualização da agenda */}
+      {/* Integração com o componente Scheduling */}
+      <SchedulingHeader
+        selectedDoctors={selectedDoctors}
+        doctors={healthProfessionals}
+      />
       {loadingConfig ? (
-        <div className="flex items-center justify-center h-64">Carregando...</div>
+        <div className="flex items-center justify-center h-64">
+          Carregando...
+        </div>
       ) : (
         <ScheduleView
           weekDays={weekDays}
@@ -239,20 +226,22 @@ export default function Scheduling() {
             startTime: editingAppointment.startTime,
             endTime: editingAppointment.endTime,
             duration: 30,
-            procedure: '',
-            status: 'scheduled',
-            notes: editingAppointment.observation || '',
-            patient: editingAppointment.patient ? {
-              id: editingAppointment.patient.id,
-              name: editingAppointment.patient.name,
-              email: editingAppointment.patient.email || '',
-              phone: editingAppointment.patient.phone || '',
-            } : {
-              id: '',
-              name: '',
-              email: '',
-              phone: '',
-            },
+            procedure: "",
+            status: "scheduled",
+            notes: editingAppointment.observation || "",
+            patient: editingAppointment.patient
+              ? {
+                  id: editingAppointment.patient.id,
+                  name: editingAppointment.patient.name,
+                  email: editingAppointment.patient.email || "",
+                  phone: editingAppointment.patient.phone || "",
+                }
+              : {
+                  id: "",
+                  name: "",
+                  email: "",
+                  phone: "",
+                },
             doctor: undefined,
             createdAt: editingAppointment.createdAt,
             updatedAt: editingAppointment.updatedAt,
@@ -260,7 +249,7 @@ export default function Scheduling() {
             attendanceType: editingAppointment.attendanceType,
             patientProtocol: editingAppointment.protocol,
             serviceSession: editingAppointment.serviceSession,
-            isBlocked: editingAppointment.isBlocked
+            isBlocked: editingAppointment.isBlocked,
           }}
           isOpen={isEditorOpen}
           onClose={() => {
@@ -294,7 +283,7 @@ export default function Scheduling() {
           patientId={editingAppointment.patientId}
         />
       )}
-      
+
       {/* AppointmentEditorCard para EDITAR agendamentos existentes (clique nos cards) */}
       {isEditorOpen && editingAppointment && !isNewAppointment && (
         <AppointmentEditorCard
