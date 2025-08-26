@@ -26,6 +26,8 @@ import { Badge } from "@/components/ui/badge";
 import { useScheduleConfig } from "@/contexts/ScheduleConfigContext";
 import ScheduleView from "@/components/Scheduling/ScheduleView";
 import { SchedulingHeader } from "@/components/Scheduling";
+import { getSuppliers } from "@/lib/api/services/supplier";
+import type { Supplier } from "@/lib/api/types";
 
 export default function Scheduling() {
   const [weekOffset, setWeekOffset] = useState(0);
@@ -41,6 +43,26 @@ export default function Scheduling() {
   const [selectedDoctors, setSelectedDoctors] = useState<string[]>([]); // ADICIONAR ESTA LINHA
   const { toast } = useToast();
   const { config, hours, loading: loadingConfig } = useScheduleConfig();
+
+  const [units, setUnits] = useState<Supplier[]>([]);
+  const [selectedUnit, setSelectedUnit] = useState<string>("");
+
+  const loadUnits = useCallback(async () => {
+    try {
+      const fetchedUnits = await getSuppliers({ category: "unidade" });
+      setUnits(fetchedUnits);
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar as unidades",
+        variant: "destructive",
+      });
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    loadUnits();
+  }, [loadUnits]);
 
   // Selecionar automaticamente o primeiro profissional quando a lista for carregada
   useEffect(() => {
@@ -191,12 +213,7 @@ export default function Scheduling() {
   return (
     <div className="container mx-auto py-6">
       <h1 className="text-2xl md:text-3xl font-bold mb-1">Agenda</h1>
-      
-      {/* Integração com o componente Scheduling */}
-      <SchedulingHeader
-        selectedDoctors={selectedDoctors}
-        doctors={healthProfessionals}
-      />
+
       {loadingConfig ? (
         <div className="flex items-center justify-center h-64">
           Carregando...
@@ -212,6 +229,9 @@ export default function Scheduling() {
           onNewAppointment={handleNewAppointment}
           onEditAppointment={handleEditAppointment}
           onWeekChange={handleWeekChange}
+          units={units}
+          selectedUnit={selectedUnit}
+          onUnitChange={setSelectedUnit}
         />
       )}
 

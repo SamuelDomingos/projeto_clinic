@@ -1,4 +1,5 @@
 import React, { useCallback, useRef } from 'react';
+import { Diamond } from 'lucide-react';
 
 interface ButtonIAProps {
   onToggleSidebar?: () => void;
@@ -59,11 +60,7 @@ function ButtonIA({ onToggleSidebar }: ButtonIAProps) {
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
       >
-        <div className="icon-container">
-          <svg className="gemini-icon" viewBox="0 -960 960 960">
-            <path d="M480-80q-6,0-11-4t-7-10q-17-67-51-126T328-328T220-411T94-462q-6-2-10-7t-4-11t4-11t10-7q67-17 126-51t108-83t83-108t51-126q2-6 7-10t11-4t10.5,4t6.5,10q18,67 52,126t83,108t108,83t126,51q6,2 10,7t4,11t-4,11t-10,7q-67,17-126,51T632-328T549-220T498-94q-2,6-7,10t-11,4Z" />
-          </svg>
-        </div>
+            <Diamond className="gemini-icon" />
       </button>
       <style jsx>{`
         .gemini-button-wrapper {
@@ -104,17 +101,6 @@ function ButtonIA({ onToggleSidebar }: ButtonIAProps) {
 
         .gemini-button:active {
           transform: translateY(0) scale(1.02);
-        }
-
-        .icon-container {
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 3;
         }
 
         .gemini-icon {
