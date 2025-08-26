@@ -38,12 +38,7 @@ import { ScheduleHolidayModule } from './modules/schedule/holidays/schedule-holi
 import { ScheduleEventModule } from './modules/schedule/events/schedule-event.module';
 import { ScheduleRuleModule } from './modules/schedule/rules/schedule-rule.module';
 import { KitsModule } from './modules/kits/kits.module';
-import { FinancialAIModule } from './modules/financial-ai/financial-ai.module';
-import { ManagementAIModule } from './modules/management-ai/management-ai.module';
-import { InventoryAIModule } from './modules/inventory-ai/inventory-ai.module';
-import { SchedulingAIModule } from './modules/scheduling-ai/scheduling-ai.module';
-import { PatientAIModule } from './modules/patient-ai/patient-ai.module';
-import { BusinessIntelligenceModule } from './modules/business-intelligence/business-intelligence.module';
+import { AIAgentModule } from './modules/ai-agent/ai-agent.module';
 
 @Module({
   imports: [
@@ -84,13 +79,7 @@ import { BusinessIntelligenceModule } from './modules/business-intelligence/busi
     ScheduleRuleModule,
     AttendanceSchedulesModule,
     KitsModule,
-    // Módulos de IA
-    FinancialAIModule,
-    ManagementAIModule,
-    InventoryAIModule,
-    SchedulingAIModule,
-    PatientAIModule,
-    BusinessIntelligenceModule,
+    AIAgentModule,
   ],
 })
 export class AppModule {}

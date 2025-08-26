@@ -7,7 +7,7 @@ async function bootstrap() {
 
   // Habilitar CORS
   app.enableCors({
-    origin: 'http://192.168.15.118:8080', // Substitua pelo endereço do seu frontend
+    origin: 'http://192.168.15.228:8080', // Substitua pelo endereço do seu frontend
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE', // Métodos HTTP permitidos
     credentials: true, // Permite o envio de cookies e cabeçalhos de autorização
   });

@@ -18,7 +18,10 @@ import { CategoriesModule } from '../categories/categories.module'; // Adicionar
     CategoriesModule, // Adicionar esta linha
   ],
   controllers: [InvoicesController],
-  providers: [InvoicesService],
-  exports: [InvoicesService],
+  providers: [
+    InvoicesService,
+    { provide: 'SERVICE_FATURAMENTO', useExisting: InvoicesService }, // Adicione esta linha
+  ],
+  exports: [InvoicesService, 'SERVICE_FATURAMENTO'], // Adicione 'SERVICE_FATURAMENTO' aqui
 })
 export class InvoicesModule {}
