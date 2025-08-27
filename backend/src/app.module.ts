@@ -39,6 +39,7 @@ import { ScheduleEventModule } from './modules/schedule/events/schedule-event.mo
 import { ScheduleRuleModule } from './modules/schedule/rules/schedule-rule.module';
 import { KitsModule } from './modules/kits/kits.module';
 import { AIAgentModule } from './modules/ai-agent/ai-agent.module';
+import { ReportModule } from './modules/report/report.module';
 
 @Module({
   imports: [
@@ -80,6 +81,7 @@ import { AIAgentModule } from './modules/ai-agent/ai-agent.module';
     AttendanceSchedulesModule,
     KitsModule,
     AIAgentModule,
+    ReportModule,
   ],
 })
 export class AppModule {}
