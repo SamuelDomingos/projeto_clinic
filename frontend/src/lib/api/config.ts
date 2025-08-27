@@ -7,7 +7,7 @@ export function isAxiosError(error: unknown): error is Error & { response?: { da
 
 // Configuração base do axios
 export const api = axios.create({
-  baseURL: 'http://192.168.15.118:3000',
+  baseURL: 'http://192.168.15.228:3000',
   headers: {
     'Content-Type': 'application/json',
   },
