@@ -1,19 +1,24 @@
-import { DynamicModule, Module } from '@nestjs/common';
+import { Module, DynamicModule } from '@nestjs/common';
 import { DiscoveryModule } from '@nestjs/core';
-import { AIAgentService } from './ai-agent.service';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AIAgentController } from './ai-agent.controller';
+import { AIAgentService } from './ai-agent.service';
 import { ModuleRegistryService } from './module-registry.service';
+import { ReportModule } from '../report/report.module';
 
-@Module({
-  imports: [DiscoveryModule],
-  controllers: [AIAgentController],
-  providers: [AIAgentService, ModuleRegistryService],
-  exports: [AIAgentService, ModuleRegistryService],
-})
+@Module({})
 export class AIAgentModule {
   static forRoot(): DynamicModule {
     return {
       module: AIAgentModule,
+      imports: [
+        DiscoveryModule,
+        TypeOrmModule.forFeature([]),
+        ScheduleModule.forRoot(),
+        ReportModule,
+      ],
+      controllers: [AIAgentController],
       providers: [AIAgentService, ModuleRegistryService],
       exports: [AIAgentService, ModuleRegistryService],
     };
@@ -22,11 +27,20 @@ export class AIAgentModule {
   static registerAsync(options: any): DynamicModule {
     return {
       module: AIAgentModule,
-      imports: options.imports || [],
+      imports: [
+        DiscoveryModule,
+        TypeOrmModule.forFeature([]),
+        ScheduleModule.forRoot(),
+        ReportModule,
+      ],
+      controllers: [AIAgentController],
       providers: [
         AIAgentService,
         ModuleRegistryService,
-        ...(options.providers || []),
+        {
+          provide: 'AI_AGENT_OPTIONS',
+          useValue: options,
+        },
       ],
       exports: [AIAgentService, ModuleRegistryService],
     };

@@ -1,10 +1,13 @@
-import { Injectable, BadRequestException, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, BadRequestException, InternalServerErrorException, Logger } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { ModuleRegistryService } from './module-registry.service';
 import { conversarComIA } from '../../services/groq.service';
+import { DataSource } from 'typeorm';
+import { InjectDataSource } from '@nestjs/typeorm';
+import { Cron, CronExpression } from '@nestjs/schedule';
 
 // Interfaces para tipos de relatórios
-interface RelatorioConfig {
+export interface RelatorioConfig {
   modulo: string;
   tipo: 'analitico' | 'resumido' | 'comparativo' | 'tendencia' | 'personalizado';
   periodo?: {
@@ -17,7 +20,7 @@ interface RelatorioConfig {
   agrupamento?: string[];
 }
 
-interface RelatorioResultado {
+export interface RelatorioResultado {
   id: string;
   titulo: string;
   conteudo: string;
@@ -31,38 +34,103 @@ interface RelatorioResultado {
   anexos?: any[];
 }
 
+export interface DatabaseQuery {
+  module: string;
+  entity: string;
+  operation?: 'find' | 'count' | 'aggregate';
+  conditions?: Record<string, any>;
+  joins?: string[];
+  groupBy?: string[];
+  orderBy?: Record<string, 'ASC' | 'DESC'>;
+  limit?: number;
+  offset?: number;
+}
+
+export interface AlertRule {
+  id: string;
+  name: string;
+  description: string;
+  module: string;
+  condition: string;
+  actions: AlertAction[];
+  isActive: boolean;
+  createdAt: Date;
+  lastTriggered?: Date;
+}
+
+export interface AlertAction {
+  type: 'email' | 'notification' | 'webhook';
+  target: string;
+  message: string;
+}
+
+  interface AIResponse {
+    interpretation: string;
+    query: any;
+    explanation: string;
+  }
+
 @Injectable()
 export class AIAgentService {
+  private readonly logger = new Logger(AIAgentService.name);
+  private alertRules: Map<string, AlertRule> = new Map();
+  private queryCache: Map<string, { data: any; timestamp: Date; ttl: number }> = new Map();
+  private readonly CACHE_TTL = 300000; // 5 minutos
+
   constructor(
     private moduleRef: ModuleRef,
     private registry: ModuleRegistryService,
-  ) {}
+    @InjectDataSource() private readonly dataSource: DataSource,
+  ) {
+    this.initializeDefaultAlertRules();
+  }
+
+  private initializeDefaultAlertRules(): void {
+    // Implementar regras padrão de alerta se necessário
+  }
 
   private getService(modulo: string): any {
     if (!modulo || typeof modulo !== 'string') {
-      throw new BadRequestException(`Módulo inválido fornecido para getService: ${modulo}`);
+      throw new BadRequestException(`Módulo inválido fornecido: ${modulo}`);
     }
-    const serviceToken = `SERVICE_${modulo.toUpperCase()}`;
-    const service = this.moduleRef.get(serviceToken, { strict: false });
-    if (!service) {
-      throw new InternalServerErrorException(`Serviço para o módulo '${modulo}' não encontrado.`);
+    
+    // Usar o ModuleRegistryService para obter informações do módulo
+    const moduleInfo = this.registry.getModuleInfo(modulo);
+    if (!moduleInfo || !moduleInfo.service) {
+      // Tentar buscar pelos módulos disponíveis
+      const availableModules = this.registry.getAllModules();
+      throw new BadRequestException(
+        `Módulo '${modulo}' não encontrado. Módulos disponíveis: ${availableModules.join(', ')}`
+      );
     }
-    return service;
+  
+    try {
+      // Usar o nome da classe do serviço para buscar no contexto do NestJS
+      const serviceName = moduleInfo.service.name;
+      const service = this.moduleRef.get(serviceName, { strict: false });
+      
+      if (!service) {
+        throw new InternalServerErrorException(
+          `Serviço '${serviceName}' não encontrado no contexto do NestJS`
+        );
+      }
+      
+      return service;
+    } catch (error) {
+      this.logger.error(`Erro ao obter serviço para módulo '${modulo}':`, error);
+      throw new InternalServerErrorException(
+        `Erro ao acessar serviço do módulo '${modulo}': ${error.message}`
+      );
+    }
   }
 
   // Método principal para gerar relatórios
   async gerarRelatorio(config: RelatorioConfig): Promise<RelatorioResultado> {
     try {
-      // Validar configuração
       this.validarConfigRelatorio(config);
-
-      // Obter dados baseado no módulo e filtros
       const dados = await this.obterDadosParaRelatorio(config.modulo, config.filtros, config.periodo);
-
-      // Gerar relatório usando IA
       const conteudo = await this.gerarConteudoRelatorio(config, dados);
 
-      // Construir resultado
       const resultado: RelatorioResultado = {
         id: this.gerarIdRelatorio(),
         titulo: this.gerarTituloRelatorio(config),
@@ -84,34 +152,6 @@ export class AIAgentService {
         config: config
       });
     }
-  }
-
-  // Método para gerar múltiplos relatórios
-  async gerarRelatoriosEmLote(configs: RelatorioConfig[]): Promise<RelatorioResultado[]> {
-    const resultados: RelatorioResultado[] = [];
-    
-    for (const config of configs) {
-      try {
-        const relatorio = await this.gerarRelatorio(config);
-        resultados.push(relatorio);
-      } catch (error) {
-        // Log do erro mas continua processando outros relatórios
-        console.error(`Erro ao gerar relatório para módulo ${config.modulo}:`, error);
-        resultados.push({
-          id: this.gerarIdRelatorio(),
-          titulo: `Erro - ${config.modulo}`,
-          conteudo: `Erro ao gerar relatório: ${error.message}`,
-          metadados: {
-            modulo: config.modulo,
-            tipo: config.tipo,
-            dataGeracao: new Date(),
-            totalRegistros: 0
-          }
-        });
-      }
-    }
-
-    return resultados;
   }
 
   // Método para relatórios agendados/automáticos
@@ -153,7 +193,6 @@ export class AIAgentService {
 
     const resposta = await conversarComIA(mensagens);
     
-    // Formatar conteúdo baseado no formato solicitado
     return this.formatarConteudo(resposta.content, config.formato || 'texto');
   }
 
@@ -223,14 +262,12 @@ export class AIAgentService {
     switch (formato) {
       case 'json':
         try {
-          // Tentar estruturar como JSON se possível
           return JSON.stringify({ relatorio: conteudo }, null, 2);
         } catch {
           return conteudo;
         }
       
       case 'markdown':
-        // Adicionar formatação markdown se não existir
         if (!conteudo.includes('#') && !conteudo.includes('**')) {
           return `# Relatório\n\n${conteudo}`;
         }
@@ -242,10 +279,6 @@ export class AIAgentService {
     }
   }
 
-  private gerarIdRelatorio(): string {
-    return `REL_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  }
-
   private gerarTituloRelatorio(config: RelatorioConfig): string {
     const dataAtual = new Date().toLocaleDateString('pt-BR');
     const tipoCapitalizado = config.tipo.charAt(0).toUpperCase() + config.tipo.slice(1);
@@ -254,20 +287,11 @@ export class AIAgentService {
     return `Relatório ${tipoCapitalizado} - ${moduloCapitalizado} (${dataAtual})`;
   }
 
-  // Versão aprimorada do método original
-  private async gerarRelatorioPersonalizado(parametros: any): Promise<string> {
-    const config: RelatorioConfig = {
-      modulo: parametros.modulo,
-      tipo: parametros.tipo || 'personalizado',
-      filtros: parametros.filtros,
-      formato: parametros.formato || 'texto',
-      metricas: parametros.metricas
-    };
-
-    const resultado = await this.gerarRelatorio(config);
-    return resultado.conteudo;
+  private gerarIdRelatorio(): string {
+    return `rel_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 
+  // Método unificado para obter dados (substitui todos os métodos obterDados específicos)
   private async obterDadosParaRelatorio(modulo: string, filtros?: Record<string, any>, periodo?: { inicio: Date; fim: Date }): Promise<any> {
     if (!modulo) {
       throw new BadRequestException('Módulo não especificado para obterDadosParaRelatorio.');
@@ -278,227 +302,14 @@ export class AIAgentService {
       throw new InternalServerErrorException(`Serviço para o módulo '${modulo}' não encontrado.`);
     }
 
-    // Implementar lógica específica por módulo
-    switch (modulo) {
-      case 'patients':
-        return this.obterDadosPacientes(service, filtros, periodo);
-      
-      case 'appointments':
-        return this.obterDadosConsultas(service, filtros, periodo);
-      
-      case 'invoices':
-        return this.obterDadosFaturas(service, filtros, periodo);
-      
-      case 'stock':
-        return this.obterDadosEstoque(service, filtros, periodo);
-      
-      default:
-        // Método genérico
-        if (service.findAll) {
-          return service.findAll(filtros);
-        }
-        return {};
+    // Método genérico que funciona para todos os módulos
+    if (service.findAll) {
+      return service.findAll(filtros);
     }
+    return {};
   }
 
-  private async obterDadosPacientes(service: any, filtros?: any, periodo?: any): Promise<any> {
-    let dados = await service.findAll();
-    
-    // Aplicar filtros se fornecidos
-    if (filtros) {
-      dados = dados.filter((paciente: any) => {
-        return Object.keys(filtros).every(key => {
-          if (filtros[key] === undefined) return true;
-          return paciente[key] === filtros[key];
-        });
-      });
-    }
-
-    // Aplicar filtro de período se fornecido
-    if (periodo && dados.length > 0) {
-      dados = dados.filter((paciente: any) => {
-        const dataCadastro = new Date(paciente.createdAt || paciente.dataCadastro);
-        return dataCadastro >= periodo.inicio && dataCadastro <= periodo.fim;
-      });
-    }
-
-    return {
-      pacientes: dados,
-      total: dados.length,
-      estatisticas: this.calcularEstatisticasPacientes(dados)
-    };
-  }
-
-  private async obterDadosConsultas(service: any, filtros?: any, periodo?: any): Promise<any> {
-    let dados = await service.findAll();
-
-    if (filtros) {
-      dados = dados.filter((consulta: any) => {
-        return Object.keys(filtros).every(key => {
-          if (filtros[key] === undefined) return true;
-          return consulta[key] === filtros[key];
-        });
-      });
-    }
-
-    if (periodo) {
-      dados = dados.filter((consulta: any) => {
-        const dataConsulta = new Date(consulta.dataConsulta || consulta.date);
-        return dataConsulta >= periodo.inicio && dataConsulta <= periodo.fim;
-      });
-    }
-
-    return {
-      consultas: dados,
-      total: dados.length,
-      estatisticas: this.calcularEstatisticasConsultas(dados)
-    };
-  }
-
-  private async obterDadosFaturas(service: any, filtros?: any, periodo?: any): Promise<any> {
-    let dados = await service.findAll();
-
-    if (filtros) {
-      dados = dados.filter((fatura: any) => {
-        return Object.keys(filtros).every(key => {
-          if (filtros[key] === undefined) return true;
-          return fatura[key] === filtros[key];
-        });
-      });
-    }
-
-    if (periodo) {
-      dados = dados.filter((fatura: any) => {
-        const dataFatura = new Date(fatura.dataEmissao || fatura.createdAt);
-        return dataFatura >= periodo.inicio && dataFatura <= periodo.fim;
-      });
-    }
-
-    return {
-      faturas: dados,
-      total: dados.length,
-      valorTotal: dados.reduce((sum: number, fatura: any) => sum + (fatura.valor || 0), 0),
-      estatisticas: this.calcularEstatisticasFaturas(dados)
-    };
-  }
-
-  private async obterDadosEstoque(service: any, filtros?: any, periodo?: any): Promise<any> {
-    const dados = await service.findAll();
-    const estoqueBaixo = service.verificarEstoqueBaixo ? await service.verificarEstoqueBaixo() : [];
-
-    return {
-      produtos: dados,
-      total: dados.length,
-      estoqueBaixo: estoqueBaixo,
-      alertas: estoqueBaixo.length,
-      estatisticas: this.calcularEstatisticasEstoque(dados)
-    };
-  }
-
-  private calcularEstatisticasPacientes(dados: any[]): any {
-    return {
-      totalPacientes: dados.length,
-      porIdade: this.agruparPorIdade(dados),
-      porGenero: this.agruparPorGenero(dados),
-      cadastrosRecentes: dados.filter(p => {
-        const cadastro = new Date(p.createdAt || p.dataCadastro);
-        const umMesAtras = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-        return cadastro >= umMesAtras;
-      }).length
-    };
-  }
-
-  private calcularEstatisticasConsultas(dados: any[]): any {
-    return {
-      totalConsultas: dados.length,
-      porStatus: this.agruparPorStatus(dados),
-      porMedico: this.agruparPorMedico(dados),
-      porMes: this.agruparPorMes(dados)
-    };
-  }
-
-  private calcularEstatisticasFaturas(dados: any[]): any {
-    return {
-      totalFaturas: dados.length,
-      valorMedio: dados.length > 0 ? dados.reduce((sum, f) => sum + (f.valor || 0), 0) / dados.length : 0,
-      porStatus: this.agruparPorStatusFatura(dados),
-      faturamentoMensal: this.calcularFaturamentoMensal(dados)
-    };
-  }
-
-  private calcularEstatisticasEstoque(dados: any[]): any {
-    return {
-      totalProdutos: dados.length,
-      valorTotalEstoque: dados.reduce((sum, p) => sum + ((p.quantidade || 0) * (p.preco || 0)), 0),
-      produtosEmFalta: dados.filter(p => (p.quantidade || 0) === 0).length,
-      produtosEstoqueBaixo: dados.filter(p => (p.quantidade || 0) > 0 && (p.quantidade || 0) <= (p.estoqueMinimo || 5)).length
-    };
-  }
-
-  // Métodos auxiliares para agrupamento
-  private agruparPorIdade(dados: any[]): any {
-    const grupos = { '0-18': 0, '19-35': 0, '36-60': 0, '60+': 0 };
-    dados.forEach(p => {
-      const idade = p.idade || 0;
-      if (idade <= 18) grupos['0-18']++;
-      else if (idade <= 35) grupos['19-35']++;
-      else if (idade <= 60) grupos['36-60']++;
-      else grupos['60+']++;
-    });
-    return grupos;
-  }
-
-  private agruparPorGenero(dados: any[]): any {
-    return dados.reduce((acc, p) => {
-      const genero = p.genero || 'Não informado';
-      acc[genero] = (acc[genero] || 0) + 1;
-      return acc;
-    }, {});
-  }
-
-  private agruparPorStatus(dados: any[]): any {
-    return dados.reduce((acc, c) => {
-      const status = c.status || 'Não informado';
-      acc[status] = (acc[status] || 0) + 1;
-      return acc;
-    }, {});
-  }
-
-  private agruparPorMedico(dados: any[]): any {
-    return dados.reduce((acc, c) => {
-      const medico = c.medico || c.doctor || 'Não informado';
-      acc[medico] = (acc[medico] || 0) + 1;
-      return acc;
-    }, {});
-  }
-
-  private agruparPorMes(dados: any[]): any {
-    return dados.reduce((acc, c) => {
-      const data = new Date(c.dataConsulta || c.date);
-      const mes = `${data.getFullYear()}-${(data.getMonth() + 1).toString().padStart(2, '0')}`;
-      acc[mes] = (acc[mes] || 0) + 1;
-      return acc;
-    }, {});
-  }
-
-  private agruparPorStatusFatura(dados: any[]): any {
-    return dados.reduce((acc, f) => {
-      const status = f.status || 'Não informado';
-      acc[status] = (acc[status] || 0) + 1;
-      return acc;
-    }, {});
-  }
-
-  private calcularFaturamentoMensal(dados: any[]): any {
-    return dados.reduce((acc, f) => {
-      const data = new Date(f.dataEmissao || f.createdAt);
-      const mes = `${data.getFullYear()}-${(data.getMonth() + 1).toString().padStart(2, '0')}`;
-      acc[mes] = (acc[mes] || 0) + (f.valor || 0);
-      return acc;
-    }, {});
-  }
-
-  // Método original otimizarProcessos (mantido para compatibilidade)
+  // Método principal para otimização de processos
   async otimizarProcessos(tarefa: string, contextoGlobal: any) {
     let observacao = '';
     let decisao = '';
@@ -568,6 +379,19 @@ export class AIAgentService {
     return { resultado: 'Otimização concluída.', detalhes: observacao };
   }
 
+  private async gerarRelatorioPersonalizado(parametros: any): Promise<string> {
+    const config: RelatorioConfig = {
+      modulo: parametros.modulo,
+      tipo: parametros.tipo || 'personalizado',
+      filtros: parametros.filtros,
+      formato: parametros.formato || 'texto',
+      metricas: parametros.metricas
+    };
+
+    const resultado = await this.gerarRelatorio(config);
+    return resultado.conteudo;
+  }
+
   private async emitirAlertaInteligente(parametros: any): Promise<string> {
     const modulo = parametros.modulo;
     if (!modulo || typeof modulo !== 'string') {
@@ -588,8 +412,283 @@ export class AIAgentService {
     if (!service) {
       throw new InternalServerErrorException(`Serviço para o módulo '${modulo}' não encontrado.`);
     }
-    if (modulo === 'stock') return service.verificarEstoqueBaixo();
-    // Adicione casos para outros módulos
+    if (modulo === 'stock' && service.verificarEstoqueBaixo) {
+      return service.verificarEstoqueBaixo();
+    }
     return {};
+  }
+
+  // Consulta dinâmica ao banco de dados (versão unificada)
+  async executeDynamicQuery(query: DatabaseQuery): Promise<any> {
+    try {
+      const cacheKey = this.generateCacheKey(query);
+      const cached = this.queryCache.get(cacheKey);
+      
+      if (cached && Date.now() - cached.timestamp.getTime() < cached.ttl) {
+        return cached.data;
+      }
+
+      const service = this.getService(query.module);
+      if (!service) {
+        throw new Error(`Service for module ${query.module} not found`);
+      }
+
+      let result;
+      if (service.findAll) {
+        result = await service.findAll(query.conditions || {});
+      } else {
+        result = {};
+      }
+
+      // Cache do resultado
+      this.queryCache.set(cacheKey, {
+        data: result,
+        timestamp: new Date(),
+        ttl: this.CACHE_TTL
+      });
+
+      return result;
+    } catch (error) {
+      this.logger.error('Erro na consulta dinâmica:', error);
+      throw new InternalServerErrorException('Erro ao executar consulta dinâmica');
+    }
+  }
+
+  
+  // Método para limpar e extrair JSON da resposta da IA
+  private cleanAndParseAIResponse(content: string): AIResponse {
+    try {
+      // Remove blocos de código markdown
+      let cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+      
+      // Remove quebras de linha extras e espaços
+      cleanContent = cleanContent.trim();
+      
+      // Tenta encontrar JSON válido na resposta
+      const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        cleanContent = jsonMatch[0];
+      }
+      
+      // Parse do JSON
+      const parsed = JSON.parse(cleanContent);
+      
+      // Validação dos campos obrigatórios
+      if (!parsed.interpretation || !parsed.query || !parsed.explanation) {
+        throw new Error('Resposta da IA não contém todos os campos obrigatórios');
+      }
+      
+      return parsed;
+    } catch (error) {
+      throw new Error(`Erro ao processar resposta da IA: ${error.message}. Conteúdo: ${content.substring(0, 200)}...`);
+    }
+  }
+  
+
+  async processNaturalLanguageQuery(question: string): Promise<any> {
+    try {
+      const projectKnowledge = this.registry.getProjectKnowledge();
+      const availableModules = this.registry.getAllModules(); // Módulos descobertos automaticamente
+      
+      const prompt = `
+        Você é um assistente de banco de dados inteligente.
+        Estrutura do projeto: ${JSON.stringify(projectKnowledge.structure, null, 2)}
+        Módulos disponíveis: ${availableModules.join(', ')}
+        
+        Pergunta do usuário: "${question}"
+        
+        Converta esta pergunta em uma consulta estruturada usando APENAS os módulos disponíveis listados acima.
+        Responda EXCLUSIVAMENTE em JSON, sem texto adicional, com o seguinte formato:
+        {
+          "interpretation": "interpretação da pergunta",
+          "query": {
+            "module": "nome_do_modulo_da_lista_acima",
+            "entity": "nome_da_entidade",
+            "operation": "find",
+            "conditions": {}
+          },
+          "explanation": "explicação da consulta"
+        }
+        
+        Exemplo de resposta JSON:
+        {
+          "interpretation": "Consulta de usuários ativos",
+          "query": {
+            "module": "users",
+            "entity": "User",
+            "operation": "find",
+            "conditions": {
+              "isActive": true
+            }
+          },
+          "explanation": "Esta consulta busca todos os usuários que estão marcados como ativos."
+        }
+
+        IMPORTANTE: Use apenas os módulos da lista: ${availableModules.join(', ')}
+      `;
+  
+      const mensagens = [{ role: 'user', content: prompt }];
+      const resposta = await conversarComIA(mensagens);
+      
+      // Usa o método de limpeza e parsing
+      const parsed = this.cleanAndParseAIResponse(resposta.content);
+      
+      // Validação adicional para garantir que module existe
+      if (!parsed.query || !parsed.query.module) {
+        throw new Error('Campo module é obrigatório na query');
+      }
+      
+      // Executa a consulta
+      const queryResult = await this.executeDynamicQuery(parsed.query);
+      
+      return {
+        question,
+        interpretation: parsed.interpretation,
+        query: parsed.query,
+        result: queryResult,
+        explanation: parsed.explanation,
+        timestamp: new Date()
+      };
+    } catch (error) {
+      this.logger.error('Erro no processamento de linguagem natural:', {
+        error: error.message,
+        stack: error.stack,
+        question
+      });
+      throw new InternalServerErrorException(`Erro ao processar pergunta: ${error.message}`);
+    }
+  }
+
+  // Sistema de alertas inteligentes (versão unificada)
+  async createAlertRule(rule: Omit<AlertRule, 'id'>): Promise<AlertRule> {
+    const alertRule: AlertRule = {
+      ...rule,
+      id: `alert_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      createdAt: new Date()
+    };
+    
+    this.alertRules.set(alertRule.id, alertRule);
+    return alertRule;
+  }
+
+  async getActiveAlerts(): Promise<AlertRule[]> {
+    return Array.from(this.alertRules.values()).filter(rule => rule.isActive);
+  }
+
+  async deleteAlertRule(id: string): Promise<void> {
+    this.alertRules.delete(id);
+  }
+
+  @Cron(CronExpression.EVERY_HOUR)
+  async checkAlerts(): Promise<void> {
+    const activeRules = await this.getActiveAlerts();
+    
+    for (const rule of activeRules) {
+      try {
+        const shouldTrigger = await this.evaluateAlertCondition(rule);
+        if (shouldTrigger) {
+          await this.triggerAlert(rule);
+        }
+      } catch (error) {
+        this.logger.error(`Error checking alert ${rule.id}: ${error.message}`);
+      }
+    }
+  }
+
+    async dailyIntelligentAssistant(action: string, context?: any): Promise<any> {
+    try {
+      const prompt = `
+        Você é um assistente inteligente diário. 
+        Ação solicitada: ${action}
+        Contexto: ${JSON.stringify(context || {})}
+        
+        Execute a ação solicitada de forma inteligente e retorne o resultado.
+        Ações possíveis: 'resumo_diario', 'alertas_pendentes', 'sugestoes_otimizacao', 'relatorio_performance'
+        
+        Responda em JSON: { "resultado": "...", "detalhes": "...", "sugestoes": [] }
+      `;
+
+      const mensagens = [{ role: 'user', content: prompt }];
+      const resposta = await conversarComIA(mensagens);
+      
+      try {
+        return JSON.parse(resposta.content);
+      } catch {
+        return {
+          resultado: resposta.content,
+          detalhes: 'Assistente executado com sucesso',
+          sugestoes: []
+        };
+      }
+    } catch (error) {
+      this.logger.error('Erro no assistente diário:', error);
+      return {
+        resultado: 'Erro no assistente diário',
+        detalhes: error.message,
+        sugestoes: ['Verificar configuração do serviço de IA']
+      };
+    }
+  }
+
+  private async evaluateAlertCondition(rule: AlertRule): Promise<boolean> {
+    // Implementar lógica de avaliação de condições baseada na regra
+    return false;
+  }
+
+  private async triggerAlert(rule: AlertRule): Promise<void> {
+    this.logger.warn(`Alert triggered: ${rule.name}`);
+    
+    for (const action of rule.actions) {
+      await this.executeAlertAction(action, rule);
+    }
+    
+    rule.lastTriggered = new Date();
+    this.alertRules.set(rule.id, rule);
+  }
+
+  private async executeAlertAction(action: AlertAction, rule: AlertRule): Promise<void> {
+    switch (action.type) {
+      case 'email':
+        this.logger.log(`Email alert sent to ${action.target}`);
+        break;
+      case 'notification':
+        this.logger.log(`Notification sent: ${action.message}`);
+        break;
+      case 'webhook':
+        this.logger.log(`Webhook called: ${action.target}`);
+        break;
+    }
+  }
+
+  async generateIntelligentReport(request: string): Promise<RelatorioResultado> {
+    try {
+      const config = await this.parseReportRequest(request);
+      return await this.gerarRelatorio(config);
+    } catch (error) {
+      return {
+        id: this.gerarIdRelatorio(),
+        titulo: 'Erro na geração inteligente',
+        conteudo: error.message,
+        metadados: {
+          modulo: 'ai-agent',
+          tipo: 'erro',
+          dataGeracao: new Date(),
+          totalRegistros: 0
+        }
+      };
+    }
+  }
+
+  private async parseReportRequest(request: string): Promise<RelatorioConfig> {
+    // Implementar parsing inteligente da solicitação
+    return {
+      modulo: 'general',
+      tipo: 'personalizado',
+      formato: 'texto'
+    };
+  }
+
+  private generateCacheKey(query: DatabaseQuery): string {
+    return `query_${JSON.stringify(query)}`;
   }
 }

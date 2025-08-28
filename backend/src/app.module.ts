@@ -80,7 +80,7 @@ import { ReportModule } from './modules/report/report.module';
     ScheduleRuleModule,
     AttendanceSchedulesModule,
     KitsModule,
-    AIAgentModule,
+    AIAgentModule.forRoot(), // Adicione .forRoot() aqui
     ReportModule,
   ],
 })
