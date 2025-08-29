@@ -107,7 +107,7 @@ export class AIAgentService {
     try {
       // Usar o nome da classe do serviço para buscar no contexto do NestJS
       const serviceName = moduleInfo.service.name;
-      const service = this.moduleRef.get(serviceName, { strict: false });
+      const service = this.moduleRef.get(moduleInfo.service, { strict: false });
       
       if (!service) {
         throw new InternalServerErrorException(
