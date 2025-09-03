@@ -1,424 +1,272 @@
-import { Injectable, BadRequestException, InternalServerErrorException, Logger } from '@nestjs/common';
-import { ModuleRef } from '@nestjs/core';
-import { ModuleRegistryService } from './module-registry.service';
-import { conversarComIA } from '../../services/groq.service';
+import { 
+  Injectable, 
+  BadRequestException, 
+  InternalServerErrorException, 
+  Logger 
+} from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { Cron, CronExpression } from '@nestjs/schedule';
-
-// Interfaces para tipos de relatórios
-export interface RelatorioConfig {
-  modulo: string;
-  tipo: 'analitico' | 'resumido' | 'comparativo' | 'tendencia' | 'personalizado';
-  periodo?: {
-    inicio: Date;
-    fim: Date;
-  };
-  filtros?: Record<string, any>;
-  formato?: 'texto' | 'json' | 'markdown';
-  metricas?: string[];
-  agrupamento?: string[];
-}
-
-export interface RelatorioResultado {
-  id: string;
-  titulo: string;
-  conteudo: string;
-  metadados: {
-    modulo: string;
-    tipo: string;
-    dataGeracao: Date;
-    totalRegistros: number;
-    periodo?: string;
-  };
-  anexos?: any[];
-}
+import { conversarComIA, conversarComIAParaJSON } from '../../services/groq.service';
 
 export interface DatabaseQuery {
   module: string;
   entity: string;
-  operation?: 'find' | 'count' | 'aggregate';
+  operation?: 'find' | 'count' | 'join';
   conditions?: Record<string, any>;
-  joins?: string[];
-  groupBy?: string[];
   orderBy?: Record<string, 'ASC' | 'DESC'>;
   limit?: number;
   offset?: number;
+  // JOINs relacionais
+  joins?: {
+    table: string;
+    on: string;
+    type?: 'INNER' | 'LEFT' | 'RIGHT';
+    select?: string[];
+  }[];
+  relations?: string[];
+  groupBy?: string[];
 }
 
-export interface AlertRule {
-  id: string;
-  name: string;
-  description: string;
-  module: string;
-  condition: string;
-  actions: AlertAction[];
-  isActive: boolean;
-  createdAt: Date;
-  lastTriggered?: Date;
+interface DatabaseSchema {
+  tableName: string;
+  entityName: string;
+  columns: {
+    name: string;
+    type: string;
+    nullable: boolean;
+    primary: boolean;
+  }[];
+  relations: {
+    name: string;
+    type: string;
+    target: string;
+  }[];
 }
 
-export interface AlertAction {
-  type: 'email' | 'notification' | 'webhook';
-  target: string;
-  message: string;
+interface ConversationContext {
+  history: Array<{
+    question: string;
+    response: any;
+    timestamp: Date;
+  }>;
+  lastAccess: Date;
+  sessionId: string;
 }
-
-  interface AIResponse {
-    interpretation: string;
-    query: any;
-    explanation: string;
-  }
 
 @Injectable()
 export class AIAgentService {
   private readonly logger = new Logger(AIAgentService.name);
-  private alertRules: Map<string, AlertRule> = new Map();
   private queryCache: Map<string, { data: any; timestamp: Date; ttl: number }> = new Map();
-  private readonly CACHE_TTL = 300000; // 5 minutos
-
-  constructor(
-    private moduleRef: ModuleRef,
-    private registry: ModuleRegistryService,
-    @InjectDataSource() private readonly dataSource: DataSource,
-  ) {
-    this.initializeDefaultAlertRules();
-  }
-
-  private initializeDefaultAlertRules(): void {
-    // Implementar regras padrão de alerta se necessário
-  }
-
-  private getService(modulo: string): any {
-    if (!modulo || typeof modulo !== 'string') {
-      throw new BadRequestException(`Módulo inválido fornecido: ${modulo}`);
-    }
-    
-    // Usar o ModuleRegistryService para obter informações do módulo
-    const moduleInfo = this.registry.getModuleInfo(modulo);
-    if (!moduleInfo || !moduleInfo.service) {
-      // Tentar buscar pelos módulos disponíveis
-      const availableModules = this.registry.getAllModules();
-      throw new BadRequestException(
-        `Módulo '${modulo}' não encontrado. Módulos disponíveis: ${availableModules.join(', ')}`
-      );
-    }
+  private schemaCache: Map<string, DatabaseSchema> = new Map();
+  private conversationContext: Map<string, ConversationContext> = new Map();
   
-    try {
-      // Usar o nome da classe do serviço para buscar no contexto do NestJS
-      const serviceName = moduleInfo.service.name;
-      const service = this.moduleRef.get(moduleInfo.service, { strict: false });
-      
-      if (!service) {
-        throw new InternalServerErrorException(
-          `Serviço '${serviceName}' não encontrado no contexto do NestJS`
-        );
-      }
-      
-      return service;
-    } catch (error) {
-      this.logger.error(`Erro ao obter serviço para módulo '${modulo}':`, error);
-      throw new InternalServerErrorException(
-        `Erro ao acessar serviço do módulo '${modulo}': ${error.message}`
-      );
+  private schemaLastRefresh: Date = new Date(0);
+  private readonly CACHE_TTL = 300000; // 5 min
+  private readonly SCHEMA_REFRESH_INTERVAL = 300000; // 5 min
+  private readonly CONTEXT_TTL = 1800000; // 30 min
+
+  constructor(@InjectDataSource() private readonly dataSource: DataSource) {
+    // best-effort inicial
+    this.refreshDatabaseSchema();
+  }
+
+  /**
+   * Garante que o schema está atualizado
+   */
+  private async ensureSchemaFresh(): Promise<void> {
+    const now = new Date();
+    if (now.getTime() - this.schemaLastRefresh.getTime() > this.SCHEMA_REFRESH_INTERVAL) {
+      await this.refreshDatabaseSchema();
+      this.schemaLastRefresh = now;
+      this.logger.log('Schema cache refreshed');
     }
   }
 
-  // Método principal para gerar relatórios
-  async gerarRelatorio(config: RelatorioConfig): Promise<RelatorioResultado> {
+  /**
+   * Descobre automaticamente todas as entidades do banco de dados
+   */
+  private async refreshDatabaseSchema(): Promise<void> {
     try {
-      this.validarConfigRelatorio(config);
-      const dados = await this.obterDadosParaRelatorio(config.modulo, config.filtros, config.periodo);
-      const conteudo = await this.gerarConteudoRelatorio(config, dados);
+      const entities = this.dataSource.entityMetadatas;
+      
+      for (const entity of entities) {
+        const schema: DatabaseSchema = {
+          tableName: entity.tableName,
+          entityName: entity.name,
+          columns: entity.columns.map(column => ({
+            name: column.propertyName,
+            type: String(column.type),
+            nullable: column.isNullable,
+            primary: column.isPrimary
+          })),
+          relations: entity.relations.map(relation => ({
+            name: relation.propertyName,
+            type: relation.relationType,
+            target: relation.inverseEntityMetadata?.name || 'unknown'
+          }))
+        };
 
-      const resultado: RelatorioResultado = {
-        id: this.gerarIdRelatorio(),
-        titulo: this.gerarTituloRelatorio(config),
-        conteudo: conteudo,
-        metadados: {
-          modulo: config.modulo,
-          tipo: config.tipo,
-          dataGeracao: new Date(),
-          totalRegistros: Array.isArray(dados) ? dados.length : Object.keys(dados).length,
-          periodo: config.periodo ? `${config.periodo.inicio.toISOString()} - ${config.periodo.fim.toISOString()}` : undefined
-        }
-      };
+        this.schemaCache.set(entity.tableName.toLowerCase(), schema);
+        this.logger.debug(`Schema cached for table: ${entity.tableName}`);
+      }
 
-      return resultado;
-    } catch (error) {
-      throw new InternalServerErrorException({
-        mensagem: 'Erro ao gerar relatório',
-        erro: error.message,
-        config: config
+      this.logger.log(`Database schema cached for ${entities.length} entities`);
+    } catch (error: any) {
+      this.logger.error('Error refreshing database schema:', error);
+    }
+  }
+
+  /**
+   * Contexto conversacional
+   */
+  private getOrCreateContext(sessionId: string): ConversationContext {
+    if (!this.conversationContext.has(sessionId)) {
+      this.conversationContext.set(sessionId, {
+        history: [],
+        lastAccess: new Date(),
+        sessionId
       });
     }
-  }
-
-  // Método para relatórios agendados/automáticos
-  async gerarRelatorioAutomatico(modulo: string): Promise<RelatorioResultado> {
-    const config: RelatorioConfig = {
-      modulo: modulo,
-      tipo: 'analitico',
-      periodo: {
-        inicio: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // 30 dias atrás
-        fim: new Date()
-      },
-      formato: 'markdown'
-    };
-
-    return this.gerarRelatorio(config);
-  }
-
-  private validarConfigRelatorio(config: RelatorioConfig): void {
-    if (!config.modulo) {
-      throw new BadRequestException('Módulo é obrigatório para geração de relatório');
-    }
-
-    if (!['analitico', 'resumido', 'comparativo', 'tendencia', 'personalizado'].includes(config.tipo)) {
-      throw new BadRequestException('Tipo de relatório inválido');
-    }
-
-    if (config.periodo && config.periodo.inicio > config.periodo.fim) {
-      throw new BadRequestException('Data de início deve ser anterior à data de fim');
-    }
-  }
-
-  private async gerarConteudoRelatorio(config: RelatorioConfig, dados: any): Promise<string> {
-    const promptBase = this.construirPromptRelatorio(config, dados);
     
-    const mensagens = [{ 
-      role: 'user', 
-      content: promptBase 
-    }];
-
-    const resposta = await conversarComIA(mensagens);
+    const context = this.conversationContext.get(sessionId)!;
+    context.lastAccess = new Date();
     
-    return this.formatarConteudo(resposta.content, config.formato || 'texto');
+    this.cleanupOldContexts();
+    return context;
   }
 
-  private construirPromptRelatorio(config: RelatorioConfig, dados: any): string {
-    const templatesPorTipo = {
-      analitico: `
-        Analise profundamente os dados do módulo ${config.modulo}.
-        Dados: ${JSON.stringify(dados, null, 2)}
-        
-        Gere um relatório analítico detalhado incluindo:
-        1. Resumo executivo
-        2. Análise de tendências
-        3. Insights principais
-        4. Recomendações estratégicas
-        5. Indicadores de performance (se aplicável)
-        6. Conclusões e próximos passos
-      `,
-      
-      resumido: `
-        Crie um resumo conciso dos dados do módulo ${config.modulo}.
-        Dados: ${JSON.stringify(dados, null, 2)}
-        
-        Inclua apenas:
-        1. Métricas principais
-        2. Destaques importantes
-        3. Alertas críticos (se houver)
-        4. Resumo em bullet points
-      `,
-      
-      comparativo: `
-        Compare e analise os dados do módulo ${config.modulo}.
-        Dados: ${JSON.stringify(dados, null, 2)}
-        
-        Faça comparações entre:
-        1. Períodos (se dados temporais disponíveis)
-        2. Categorias diferentes
-        3. Performance vs metas (se aplicável)
-        4. Benchmarks internos
-      `,
-      
-      tendencia: `
-        Analise tendências nos dados do módulo ${config.modulo}.
-        Dados: ${JSON.stringify(dados, null, 2)}
-        
-        Foque em:
-        1. Padrões temporais
-        2. Sazonalidades
-        3. Projeções futuras
-        4. Fatores de influência
-        5. Recomendações baseadas em tendências
-      `,
-      
-      personalizado: `
-        Gere um relatório personalizado para o módulo ${config.modulo}.
-        Dados: ${JSON.stringify(dados, null, 2)}
-        Métricas solicitadas: ${config.metricas?.join(', ') || 'todas disponíveis'}
-        Filtros aplicados: ${JSON.stringify(config.filtros) || 'nenhum'}
-        
-        Customize o relatório baseado nos parâmetros específicos fornecidos.
-      `
-    };
-
-    return templatesPorTipo[config.tipo] || templatesPorTipo.analitico;
+  /**
+   * Remove contextos expirados
+   */
+  private cleanupOldContexts(): void {
+    const now = new Date();
+    for (const [sid, context] of this.conversationContext.entries()) {
+      if (now.getTime() - context.lastAccess.getTime() > this.CONTEXT_TTL) {
+        this.conversationContext.delete(sid);
+      }
+    }
   }
 
-  private formatarConteudo(conteudo: string, formato: string): string {
-    switch (formato) {
-      case 'json':
-        try {
-          return JSON.stringify({ relatorio: conteudo }, null, 2);
-        } catch {
-          return conteudo;
-        }
-      
-      case 'markdown':
-        if (!conteudo.includes('#') && !conteudo.includes('**')) {
-          return `# Relatório\n\n${conteudo}`;
-        }
-        return conteudo;
-      
-      case 'texto':
+  /**
+   * Obtém schema por nome da tabela (case-insensitive)
+   */
+  private getTableSchema(tableName: string): DatabaseSchema | null {
+    return this.schemaCache.get((tableName || '').toLowerCase()) || null;
+  }
+
+  /**
+   * Lista tabelas disponíveis
+   */
+  private getAvailableTables(): string[] {
+    return Array.from(this.schemaCache.keys());
+  }
+
+  /**
+   * Executa consulta SQL direta
+   */
+  private async executeDirectQuery(query: string, parameters?: any[]): Promise<any[]> {
+    try {
+      const result = await this.dataSource.query(query, parameters);
+      return Array.isArray(result) ? result : [result];
+    } catch (error: any) {
+      this.logger.error('Error executing direct query:', error);
+      throw new InternalServerErrorException(`Erro na consulta: ${error.message}`);
+    }
+  }
+
+  /**
+   * Monta SQL simples (ou delega para relacional) usando o schema
+   */
+  private buildSQLQueryWithSchema(schema: DatabaseSchema, query: DatabaseQuery): { sql: string; parameters: any[] } {
+    // Se houver JOINs, usa o método relacional
+    if (query.joins && query.joins.length > 0) {
+      return this.buildRelationalSQLQuery(schema, query);
+    }
+    
+    let sql = '';
+    const parameters: any[] = [];
+
+    switch (query.operation || 'find') {
+      case 'find':
+        sql = `SELECT * FROM ${schema.tableName}`;
+        break;
+      case 'count':
+        sql = `SELECT COUNT(*) as total FROM ${schema.tableName}`;
+        break;
       default:
-        return conteudo;
-    }
-  }
-
-  private gerarTituloRelatorio(config: RelatorioConfig): string {
-    const dataAtual = new Date().toLocaleDateString('pt-BR');
-    const tipoCapitalizado = config.tipo.charAt(0).toUpperCase() + config.tipo.slice(1);
-    const moduloCapitalizado = config.modulo.charAt(0).toUpperCase() + config.modulo.slice(1);
-    
-    return `Relatório ${tipoCapitalizado} - ${moduloCapitalizado} (${dataAtual})`;
-  }
-
-  private gerarIdRelatorio(): string {
-    return `rel_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  }
-
-  // Método unificado para obter dados (substitui todos os métodos obterDados específicos)
-  private async obterDadosParaRelatorio(modulo: string, filtros?: Record<string, any>, periodo?: { inicio: Date; fim: Date }): Promise<any> {
-    if (!modulo) {
-      throw new BadRequestException('Módulo não especificado para obterDadosParaRelatorio.');
+        throw new BadRequestException(`Operação '${query.operation}' não suportada`);
     }
 
-    const service = this.getService(modulo);
-    if (!service) {
-      throw new InternalServerErrorException(`Serviço para o módulo '${modulo}' não encontrado.`);
-    }
+    // WHERE
+    if (query.conditions && Object.keys(query.conditions).length > 0) {
+      const whereConditions: string[] = [];
 
-    // Método genérico que funciona para todos os módulos
-    if (service.findAll) {
-      return service.findAll(filtros);
-    }
-    return {};
-  }
-
-  // Método principal para otimização de processos
-  async otimizarProcessos(tarefa: string, contextoGlobal: any) {
-    let observacao = '';
-    let decisao = '';
-    let iteracoes = 0;
-    const maxIteracoes = 5;
-
-    while (iteracoes < maxIteracoes && decisao !== 'concluido') {
-      const prompt = `
-        Você é um agente IA central autônomo. Tarefa: ${tarefa}. Contexto: ${JSON.stringify(contextoGlobal)}.
-        Observação: ${observacao}.
-        Decida ação: 'otimizar_pacientes', 'agendar_consulta', 'gerar_fatura', 'gerar_relatorio', 'emitir_alerta', ou 'concluido'.
-        Para 'gerar_relatorio' e 'emitir_alerta', inclua um campo 'modulo' dentro de 'parametros' para especificar o módulo relevante (ex: 'patients', 'appointments', 'invoices', 'stock').
-        Para relatórios, seja criativo e personalize com detalhes relevantes.
-        Para alertas, use linguagem clara, sugestões acionáveis e criatividade para eficiência (ex: vencimentos, estoque baixo).
-        Responda JSON: { "raciocinio": "...", "acao": "...", "parametros": {} }
-      `;
-
-      const mensagens = [{ role: 'user', content: prompt }];
-      const resposta = await conversarComIA(mensagens);
-      let parsed;
-      try {
-        const jsonMatch = resposta.content.match(/```json\n([\s\S]*?)\n```/);
-        let jsonString = resposta.content;
-        if (jsonMatch && jsonMatch[1]) {
-          jsonString = jsonMatch[1];
+      for (const [field, value] of Object.entries(query.conditions)) {
+        if (value !== undefined && value !== null) {
+          const columnExists = schema.columns.some(
+            col => col.name.toLowerCase() === field.toLowerCase()
+          );
+          if (columnExists) {
+            if (typeof value === 'object' && value !== null) {
+              const v: any = value;
+              if (v.gte && v.lte) {
+                whereConditions.push(`${field} >= ? AND ${field} <= ?`);
+                parameters.push(v.gte, v.lte);
+              } else if (v.gte) {
+                whereConditions.push(`${field} >= ?`);
+                parameters.push(v.gte);
+              } else if (v.lte) {
+                whereConditions.push(`${field} <= ?`);
+                parameters.push(v.lte);
+              }
+            } else {
+              whereConditions.push(`${field} LIKE ?`);
+              parameters.push(`%${value}%`);
+            }
+          }
         }
-        parsed = JSON.parse(jsonString);
-      } catch (e) {
-        throw new BadRequestException({
-          mensagem: 'Erro ao analisar JSON da IA.',
-          erro: e.message,
-          conteudo: resposta.content
-        });
       }
 
-      decisao = parsed.acao;
-      try {
-        if (decisao === 'otimizar_pacientes') {
-          const patientsService = this.getService('patients');
-          await patientsService.update(parsed.parametros.patientId, parsed.parametros.atualizacoes);
-          observacao = 'Pacientes otimizados.';
-        } else if (decisao === 'agendar_consulta') {
-          const appointmentsService = this.getService('appointments');
-          await appointmentsService.create(parsed.parametros.appointmentData);
-          observacao = 'Consulta agendada.';
-        } else if (decisao === 'gerar_fatura') {
-          const invoicesService = this.getService('invoices');
-          await invoicesService.create(parsed.parametros.invoiceData);
-          observacao = 'Fatura gerada.';
-        } else if (decisao === 'gerar_relatorio') {
-          const relatorio = await this.gerarRelatorioPersonalizado(parsed.parametros);
-          observacao = `Relatório gerado: ${relatorio}`;
-        } else if (decisao === 'emitir_alerta') {
-          const alerta = await this.emitirAlertaInteligente(parsed.parametros);
-          observacao = `Alerta emitido: ${alerta}`;
-        }
-      } catch (serviceError) {
-        throw new InternalServerErrorException({
-          mensagem: 'Erro ao executar ação do serviço.',
-          erro: serviceError.message,
-          acao: decisao,
-          parametros: parsed.parametros
-        });
+      if (whereConditions.length > 0) {
+        sql += ` WHERE ${whereConditions.join(' AND ')}`;
       }
-      iteracoes++;
     }
-    return { resultado: 'Otimização concluída.', detalhes: observacao };
+
+    // ORDER BY
+    if (query.orderBy && Object.keys(query.orderBy).length > 0) {
+      const orderClauses = Object.entries(query.orderBy)
+        .map(([field, direction]) => `${field} ${direction}`);
+      sql += ` ORDER BY ${orderClauses.join(', ')}`;
+    } else {
+      const createdColumn = schema.columns.find(col => 
+        col.name.toLowerCase().includes('created')
+      );
+      if (createdColumn) {
+        sql += ` ORDER BY ${createdColumn.name} DESC`;
+      }
+    }
+
+    // LIMIT / OFFSET
+    if (query.limit) {
+      sql += ` LIMIT ${query.limit}`;
+    }
+    if (query.offset) {
+      sql += ` OFFSET ${query.offset}`;
+    }
+
+    return { sql, parameters };
   }
 
-  private async gerarRelatorioPersonalizado(parametros: any): Promise<string> {
-    const config: RelatorioConfig = {
-      modulo: parametros.modulo,
-      tipo: parametros.tipo || 'personalizado',
-      filtros: parametros.filtros,
-      formato: parametros.formato || 'texto',
-      metricas: parametros.metricas
-    };
-
-    const resultado = await this.gerarRelatorio(config);
-    return resultado.conteudo;
+  /**
+   * Cache key
+   */
+  private generateCacheKey(query: DatabaseQuery): string {
+    return `${query.entity}_${JSON.stringify(query.conditions || {})}_${query.limit || 100}`;
   }
 
-  private async emitirAlertaInteligente(parametros: any): Promise<string> {
-    const modulo = parametros.modulo;
-    if (!modulo || typeof modulo !== 'string') {
-      throw new BadRequestException('Parâmetro "modulo" ausente ou inválido para alerta.');
-    }
-    const contexto = await this.verificarContextoAlerta(modulo);
-    const promptAlerta = `Crie um alerta criativo e acionável para ${parametros.tipo} (ex: vencimento ou estoque baixo) baseado em: ${JSON.stringify(contexto)}. Use linguagem clara e sugestões para eficiência.`;
-    const mensagens = [{ role: 'user', content: promptAlerta }];
-    const resposta = await conversarComIA(mensagens);
-    return resposta.content;
-  }
-
-  private async verificarContextoAlerta(modulo: string): Promise<any> {
-    if (!modulo) {
-      throw new BadRequestException('Módulo não especificado para verificarContextoAlerta.');
-    }
-    const service = this.getService(modulo);
-    if (!service) {
-      throw new InternalServerErrorException(`Serviço para o módulo '${modulo}' não encontrado.`);
-    }
-    if (modulo === 'stock' && service.verificarEstoqueBaixo) {
-      return service.verificarEstoqueBaixo();
-    }
-    return {};
-  }
-
-  // Consulta dinâmica ao banco de dados (versão unificada)
+  /**
+   * Executa consulta dinâmica
+   */
   async executeDynamicQuery(query: DatabaseQuery): Promise<any> {
     try {
       const cacheKey = this.generateCacheKey(query);
@@ -428,19 +276,20 @@ export class AIAgentService {
         return cached.data;
       }
 
-      const service = this.getService(query.module);
-      if (!service) {
-        throw new Error(`Service for module ${query.module} not found`);
+      // Resolve schema (entity ou module)
+      const schema =
+        this.getTableSchema(query.entity) ||
+        (query.module ? this.getTableSchema(query.module) : null);
+
+      if (!schema) {
+        throw new BadRequestException(
+          `Schema não encontrado para '${query.entity}'`
+        );
       }
 
-      let result;
-      if (service.findAll) {
-        result = await service.findAll(query.conditions || {});
-      } else {
-        result = {};
-      }
+      const { sql, parameters } = this.buildSQLQueryWithSchema(schema, query);
+      const result = await this.executeDirectQuery(sql, parameters);
 
-      // Cache do resultado
       this.queryCache.set(cacheKey, {
         data: result,
         timestamp: new Date(),
@@ -448,247 +297,636 @@ export class AIAgentService {
       });
 
       return result;
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error('Erro na consulta dinâmica:', error);
-      throw new InternalServerErrorException('Erro ao executar consulta dinâmica');
+      throw new InternalServerErrorException(`Erro ao executar consulta dinâmica: ${error.message}`);
     }
   }
 
-  
-  // Método para limpar e extrair JSON da resposta da IA
-  private cleanAndParseAIResponse(content: string): AIResponse {
+  /**
+   * Gera resposta conversacional
+   */
+  private async generateConversationalResponse(question: string, queryResult: any, interpretation: string): Promise<string> {
     try {
-      // Remove blocos de código markdown
-      let cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '');
-      
-      // Remove quebras de linha extras e espaços
-      cleanContent = cleanContent.trim();
-      
-      // Tenta encontrar JSON válido na resposta
-      const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        cleanContent = jsonMatch[0];
-      }
-      
-      // Parse do JSON
-      const parsed = JSON.parse(cleanContent);
-      
-      // Validação dos campos obrigatórios
-      if (!parsed.interpretation || !parsed.query || !parsed.explanation) {
-        throw new Error('Resposta da IA não contém todos os campos obrigatórios');
-      }
-      
-      return parsed;
-    } catch (error) {
-      throw new Error(`Erro ao processar resposta da IA: ${error.message}. Conteúdo: ${content.substring(0, 200)}...`);
-    }
-  }
-  
-
-  async processNaturalLanguageQuery(question: string): Promise<any> {
-    try {
-      const projectKnowledge = this.registry.getProjectKnowledge();
-      const availableModules = this.registry.getAllModules(); // Módulos descobertos automaticamente
+      const resultCount = Array.isArray(queryResult) ? queryResult.length : (queryResult ? 1 : 0);
+      const hasResults = resultCount > 0;
       
       const prompt = `
-        Você é um assistente de banco de dados inteligente.
-        Estrutura do projeto: ${JSON.stringify(projectKnowledge.structure, null, 2)}
-        Módulos disponíveis: ${availableModules.join(', ')}
+        Você é um assistente médico inteligente. O usuário fez a pergunta: "${question}"
         
-        Pergunta do usuário: "${question}"
+        Interpretação: ${interpretation}
+        Resultados encontrados: ${resultCount}
+        Tem dados: ${hasResults}
         
-        Converta esta pergunta em uma consulta estruturada usando APENAS os módulos disponíveis listados acima.
-        Responda EXCLUSIVAMENTE em JSON, sem texto adicional, com o seguinte formato:
-        {
-          "interpretation": "interpretação da pergunta",
-          "query": {
-            "module": "nome_do_modulo_da_lista_acima",
-            "entity": "nome_da_entidade",
-            "operation": "find",
-            "conditions": {}
-          },
-          "explanation": "explicação da consulta"
+        ${hasResults ? 
+          `Dados encontrados: ${JSON.stringify(queryResult).substring(0, 500)}...` : 
+          'Nenhum resultado foi encontrado.'
         }
         
-        Exemplo de resposta JSON:
-        {
-          "interpretation": "Consulta de usuários ativos",
-          "query": {
-            "module": "users",
-            "entity": "User",
-            "operation": "find",
-            "conditions": {
-              "isActive": true
-            }
-          },
-          "explanation": "Esta consulta busca todos os usuários que estão marcados como ativos."
-        }
-
-        IMPORTANTE: Use apenas os módulos da lista: ${availableModules.join(', ')}
+        Forneça uma resposta conversacional, amigável e informativa em português brasileiro.
+        Seja conciso mas útil. Se não há resultados, explique de forma positiva e sugira alternativas.
+        Se há resultados, resuma as informações principais de forma clara.
+        
+        Responda APENAS o texto da resposta, sem JSON ou formatação especial.
       `;
-  
+
       const mensagens = [{ role: 'user', content: prompt }];
       const resposta = await conversarComIA(mensagens);
       
-      // Usa o método de limpeza e parsing
-      const parsed = this.cleanAndParseAIResponse(resposta.content);
+      return resposta.content.trim();
+    } catch (error: any) {
+      this.logger.error('Erro ao gerar resposta conversacional:', error);
       
-      // Validação adicional para garantir que module existe
-      if (!parsed.query || !parsed.query.module) {
-        throw new Error('Campo module é obrigatório na query');
+      const resultCount = Array.isArray(queryResult) ? queryResult.length : (queryResult ? 1 : 0);
+      if (resultCount === 0) {
+        return 'Não encontrei resultados para sua consulta. Tente reformular a pergunta ou verificar se os dados existem no sistema.';
+      } else {
+        return `Encontrei ${resultCount} resultado(s) para sua consulta. Os dados foram processados com sucesso.`;
+      }
+    }
+  }
+
+  /**
+   * Fallback inteligente
+   */
+  private createIntelligentFallback(
+    question: string, 
+    availableTables: string[], 
+    history: Array<any> = []
+  ): any {
+    const questionLower = question.toLowerCase();
+    
+    const recentEntities = history.slice(-3).map(h => {
+      const q = h.question?.toLowerCase() || '';
+      if (q.includes('paciente') || q.includes('patient')) return 'patients';
+      if (q.includes('produto') || q.includes('product')) return 'products';
+      if (q.includes('agendamento') || q.includes('appointment')) return 'appointments';
+      return null;
+    }).filter(Boolean) as string[];
+    
+    let entity = 'patients';
+    
+    if (questionLower.includes('paciente') || questionLower.includes('patient')) {
+      entity = 'patients';
+    } else if (questionLower.includes('produto') || questionLower.includes('product') || 
+               questionLower.includes('estoque') || questionLower.includes('monjaro')) {
+      entity = 'products';
+    } else if (questionLower.includes('agendamento') || questionLower.includes('consulta') || 
+               questionLower.includes('appointment')) {
+      entity = 'appointments';
+    } else if (questionLower.includes('usuário') || questionLower.includes('user')) {
+      entity = 'users';
+    } else if (recentEntities.length > 0) {
+      entity = recentEntities[recentEntities.length - 1] || 'patients';
+    }
+    
+    if (!availableTables.includes(entity)) {
+      entity =
+        availableTables.find(table => 
+          table.includes(entity.replace(/s$/, '')) || 
+          entity.includes(table.replace(/s$/, ''))
+        ) || availableTables[0] || 'patients';
+    }
+    
+    const conditions: Record<string, any> = {};
+    const nameMatch = questionLower.match(/nome.*?([a-zA-Z]+)/);
+    if (nameMatch && nameMatch[1] && nameMatch[1].length > 2) {
+      conditions['name'] = nameMatch[1];
+    }
+    
+    if (entity === 'products') {
+      const productMatch = questionLower.match(/(monjaro|ozempic|insulina|[a-zA-Z]{4,})/);
+      if (productMatch && productMatch[1] && productMatch[1] !== 'quantos') {
+        conditions['name'] = productMatch[1];
+      }
+    }
+    
+    return {
+      interpretation: `Consulta inteligente para ${entity} (fallback com contexto)`,
+      query: {
+        module: entity,
+        entity: entity,
+        operation: 'find',
+        conditions: conditions,
+        orderBy: { createdAt: 'DESC' }, // 👈 respeita o type 'ASC' | 'DESC'
+        limit: 100
+      },
+      explanation: `Query gerada por fallback inteligente considerando contexto conversacional`,
+      confidence: 0.8,
+      usedContext: recentEntities.length > 0
+    };
+  }
+
+  /**
+   * Interpreta consultas relacionais a partir da pergunta - VERSÃO APRIMORADA
+   */
+  private interpretRelationalQuery(question: string, availableTables: string[]): DatabaseQuery | null {
+    const q = question.toLowerCase();
+    
+    // === RELACIONAMENTOS PACIENTE-CENTRADOS ===
+    
+    // Paciente + Agendamentos (mais abrangente)
+    if ((q.includes('paciente') || q.includes('patient')) && 
+        (q.includes('consulta') || q.includes('agendamento') || q.includes('appointment') || 
+         q.includes('horário') || q.includes('marcado') || q.includes('próxima'))) {
+      return {
+        module: 'patients',
+        entity: 'patients',
+        operation: 'join',
+        joins: [{
+          table: 'appointments',
+          on: 'patients.id = appointments.patientId',
+          type: 'LEFT',
+          select: ['date', 'startTime', 'duration', 'procedure', 'status']
+        }, {
+          table: 'users',
+          on: 'appointments.doctorId = users.id',
+          type: 'LEFT',
+          select: ['name as doctor_name', 'role']
+        }],
+        conditions: {},
+        orderBy: { 'appointments.date': 'DESC' },
+        limit: 50
+      };
+    }
+    
+    // Paciente + Prontuários + Médico
+    if ((q.includes('paciente') || q.includes('patient')) && 
+        (q.includes('prontuário') || q.includes('medical') || q.includes('histórico') || 
+         q.includes('evolução') || q.includes('observação') || q.includes('prescrição'))) {
+      return {
+        module: 'patients',
+        entity: 'patients',
+        operation: 'join',
+        joins: [{
+          table: 'medical_records',
+          on: 'patients.id = medical_records.patientId',
+          type: 'LEFT',
+          select: ['date', 'recordCategory', 'content', 'attachments']
+        }, {
+          table: 'users',
+          on: 'medical_records.doctorId = users.id',
+          type: 'LEFT',
+          select: ['name as doctor_name']
+        }],
+        conditions: {},
+        orderBy: { 'medical_records.date': 'DESC' },
+        limit: 50
+      };
+    }
+    
+    // Paciente + Protocolos + Serviços
+    if ((q.includes('paciente') || q.includes('patient')) && 
+        (q.includes('protocolo') || q.includes('tratamento') || q.includes('serviço') || 
+         q.includes('procedimento') || q.includes('terapia'))) {
+      return {
+        module: 'patients',
+        entity: 'patients',
+        operation: 'join',
+        joins: [{
+          table: 'patient_protocols',
+          on: 'patients.id = patient_protocols.patientId',
+          type: 'LEFT',
+          select: ['startDate', 'endDate', 'status']
+        }, {
+          table: 'protocols',
+          on: 'patient_protocols.protocolId = protocols.id',
+          type: 'LEFT',
+          select: ['name as protocol_name', 'totalPrice']
+        }],
+        conditions: {},
+        orderBy: { 'patient_protocols.startDate': 'DESC' },
+        limit: 50
+      };
+    }
+    
+    // Paciente + Faturas + Pagamentos
+    if ((q.includes('paciente') || q.includes('patient')) && 
+        (q.includes('fatura') || q.includes('invoice') || q.includes('pagamento') || 
+         q.includes('cobrança') || q.includes('débito') || q.includes('financeiro'))) {
+      return {
+        module: 'patients',
+        entity: 'patients',
+        operation: 'join',
+        joins: [{
+          table: 'invoices',
+          on: 'patients.id = invoices.patientId',
+          type: 'LEFT',
+          select: ['number', 'type', 'status', 'date', 'total', 'subtotal', 'discount']
+        }, {
+          table: 'invoice_payments',
+          on: 'invoices.id = invoice_payments.invoiceId',
+          type: 'LEFT',
+          select: ['amount', 'paymentDate', 'method']
+        }],
+        conditions: {},
+        orderBy: { 'invoices.date': 'DESC' },
+        limit: 50
+      };
+    }
+    
+    // === RELACIONAMENTOS AGENDAMENTO-CENTRADOS ===
+    
+    // Agendamentos + Paciente + Médico (mais detalhado)
+    if (q.includes('consulta') || q.includes('agendamento') || q.includes('appointment') ||
+        q.includes('agenda') || q.includes('horário')) {
+      return {
+        module: 'appointments',
+        entity: 'appointments',
+        operation: 'join',
+        joins: [
+          {
+            table: 'patients',
+            on: 'appointments.patientId = patients.id',
+            type: 'LEFT',
+            select: ['name', 'email', 'phone', 'birthDate']
+          },
+          {
+            table: 'users',
+            on: 'appointments.doctorId = users.id',
+            type: 'LEFT',
+            select: ['name as doctor_name', 'role', 'email as doctor_email']
+          }
+        ],
+        conditions: {},
+        orderBy: { 'appointments.date': 'DESC' },
+        limit: 50
+      };
+    }
+    
+    // === RELACIONAMENTOS PRODUTO/ESTOQUE-CENTRADOS ===
+    
+    // Produtos + Estoque + Movimentações
+    if (q.includes('produto') || q.includes('product') || q.includes('estoque') || 
+        q.includes('stock') || q.includes('inventário') || q.includes('medicamento')) {
+      return {
+        module: 'products',
+        entity: 'products',
+        operation: 'join',
+        joins: [{
+          table: 'stock_locations',
+          on: 'products.id = stock_locations.productId',
+          type: 'LEFT',
+          select: ['location', 'quantity']
+        }, {
+          table: 'stock_movements',
+          on: 'products.id = stock_movements.productId',
+          type: 'LEFT',
+          select: ['type', 'quantity', 'createdAt', 'reason']
+        }],
+        conditions: {},
+        orderBy: { 'stock_movements.createdAt': 'DESC' },
+        limit: 50
+      };
+    }
+    
+    // === RELACIONAMENTOS PROTOCOLO-CENTRADOS ===
+    
+    // Protocolos + Serviços + Pacientes
+    if (q.includes('protocolo') || q.includes('protocol') || q.includes('tratamento') ||
+        q.includes('serviço') || q.includes('procedimento')) {
+      return {
+        module: 'protocols',
+        entity: 'protocols',
+        operation: 'join',
+        joins: [{
+          table: 'protocol_services',
+          on: 'protocols.id = protocol_services.protocolId',
+          type: 'LEFT',
+          select: ['quantity', 'unitPrice']
+        }, {
+          table: 'services',
+          on: 'protocol_services.serviceId = services.id',
+          type: 'LEFT',
+          select: ['name as service_name', 'description', 'price']
+        }, {
+          table: 'patient_protocols',
+          on: 'protocols.id = patient_protocols.protocolId',
+          type: 'LEFT',
+          select: ['startDate', 'endDate', 'status']
+        }],
+        conditions: {},
+        orderBy: { 'protocols.createdAt': 'DESC' },
+        limit: 50
+      };
+    }
+    
+    // === RELACIONAMENTOS FINANCEIRO-CENTRADOS ===
+    
+    // Faturas + Itens + Pagamentos + Pacientes
+    if (q.includes('fatura') || q.includes('invoice') || q.includes('pagamento') ||
+        q.includes('financeiro') || q.includes('cobrança') || q.includes('receita')) {
+      return {
+        module: 'invoices',
+        entity: 'invoices',
+        operation: 'join',
+        joins: [{
+          table: 'patients',
+          on: 'invoices.patientId = patients.id',
+          type: 'LEFT',
+          select: ['name', 'email', 'phone']
+        }, {
+          table: 'invoice_items',
+          on: 'invoices.id = invoice_items.invoiceId',
+          type: 'LEFT',
+          select: ['description', 'quantity', 'unitPrice', 'totalPrice']
+        }, {
+          table: 'invoice_payments',
+          on: 'invoices.id = invoice_payments.invoiceId',
+          type: 'LEFT',
+          select: ['amount', 'paymentDate', 'method', 'status']
+        }],
+        conditions: {},
+        orderBy: { 'invoices.date': 'DESC' },
+        limit: 50
+      };
+    }
+    
+    // === RELACIONAMENTOS MÉDICO-CENTRADOS ===
+    
+    // Médicos + Agendamentos + Prontuários
+    if (q.includes('médico') || q.includes('doctor') || q.includes('profissional') ||
+        q.includes('doutor') || q.includes('dra') || q.includes('dr')) {
+      return {
+        module: 'users',
+        entity: 'users',
+        operation: 'join',
+        joins: [{
+          table: 'appointments',
+          on: 'users.id = appointments.doctorId',
+          type: 'LEFT',
+          select: ['date', 'startTime', 'procedure', 'status']
+        }, {
+          table: 'patients',
+          on: 'appointments.patientId = patients.id',
+          type: 'LEFT',
+          select: ['name as patient_name', 'email as patient_email']
+        }, {
+          table: 'medical_records',
+          on: 'users.id = medical_records.doctorId',
+          type: 'LEFT',
+          select: ['date as record_date', 'recordCategory']
+        }],
+        conditions: { 'users.role': 'doctor' },
+        orderBy: { 'appointments.date': 'DESC' },
+        limit: 50
+      };
+    }
+    
+    // === RELACIONAMENTOS COMPLEXOS MULTI-ENTIDADE ===
+    
+    // Análise completa do paciente (todos os dados relacionados)
+    if (q.includes('completo') || q.includes('tudo') || q.includes('todos') || 
+        q.includes('histórico completo') || q.includes('visão geral')) {
+      return {
+        module: 'patients',
+        entity: 'patients',
+        operation: 'join',
+        joins: [{
+          table: 'appointments',
+          on: 'patients.id = appointments.patientId',
+          type: 'LEFT',
+          select: ['date as appointment_date', 'procedure', 'status as appointment_status']
+        }, {
+          table: 'medical_records',
+          on: 'patients.id = medical_records.patientId',
+          type: 'LEFT',
+          select: ['date as record_date', 'recordCategory']
+        }, {
+          table: 'invoices',
+          on: 'patients.id = invoices.patientId',
+          type: 'LEFT',
+          select: ['number as invoice_number', 'total', 'status as invoice_status']
+        }],
+        conditions: {},
+        orderBy: { 'patients.name': 'ASC' },
+        limit: 30
+      };
+    }
+    
+    return null;
+  }
+
+  /**
+   * Processa pergunta com contexto inteligente - MÉTODO PRINCIPAL
+   */
+  async processNaturalLanguageQueryWithContext(
+    question: string, 
+    sessionId: string = 'default'
+  ): Promise<any> {
+    try {
+      await this.ensureSchemaFresh();
+      const context = this.getOrCreateContext(sessionId);
+      
+      const availableTables = this.getAvailableTables();
+      const schemaInfo = Array.from(this.schemaCache.values()).map(schema => ({
+        table: schema.tableName,
+        entity: schema.entityName,
+        columns: schema.columns.slice(0, 5).map(col => `${col.name} (${col.type})`)
+      }));
+
+      // 1) antes de chamar IA, tenta detectar consulta relacional
+      let parsed: any | null = null;
+      const relationalGuess = this.interpretRelationalQuery(question, availableTables);
+      if (relationalGuess) {
+        parsed = {
+          interpretation: 'Consulta relacional detectada automaticamente',
+          query: relationalGuess,
+          explanation: 'Detectado padrão de relacionamento a partir da pergunta'
+        };
+      }
+
+      // 2) se não detectou, usa IA com fallback inteligente
+      if (!parsed) {
+        const conversationHistory = context.history.slice(-3).map(h => 
+          `Q: ${h.question} -> R: ${h.response.totalResults || 0} resultados`
+        ).join('\n');
+
+        const enhancedPrompt = `
+CONTEXTO DA CONVERSA:\n${conversationHistory}\n\nESTRUTURA DO BANCO:\n${JSON.stringify(schemaInfo, null, 2)}\n\nTABELAS: ${availableTables.join(', ')}\n\nPERGUNTA ATUAL: "${question}"\n\nINSTRUÇÕES:\n- Use EXATAMENTE os nomes: "patients", "appointments", "users", "products"\n- SEMPRE use "operation": "find"\n- Para consultas gerais: "conditions": {}\n- Considere o contexto da conversa anterior\n\nRESPONDA APENAS COM JSON:\n{\n  "interpretation": "interpretação",\n  "query": {\n    "module": "nome_tabela",\n    "entity": "nome_tabela",\n    "operation": "find",\n    "conditions": {},\n    "orderBy": {},\n    "limit": 100\n  },\n  "explanation": "explicação"\n}`;
+
+        const resposta = await conversarComIAParaJSON(enhancedPrompt, {
+          availableTables,
+          schemaInfo
+        });
+
+        if (!resposta.success || (resposta as any).fromFallback) {
+          parsed = this.createIntelligentFallback(question, availableTables, context.history);
+          this.logger.warn('Using intelligent fallback for query processing');
+        } else {
+          try {
+            let cleanContent = (resposta.content || '').trim();
+            const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
+            if (jsonMatch) cleanContent = jsonMatch[0];
+            parsed = JSON.parse(cleanContent);
+            if (!parsed.query || !parsed.query.entity) {
+              throw new Error('Invalid JSON structure');
+            }
+          } catch {
+            parsed = this.createIntelligentFallback(question, availableTables, context.history);
+            this.logger.warn('JSON parsing failed, using intelligent fallback');
+          }
+        }
+      }
+
+      // Normaliza query
+      parsed.query.entity = String(parsed.query.entity || '').toLowerCase();
+      parsed.query.module = (parsed.query.module?.toLowerCase?.() || parsed.query.entity);
+      parsed.query.operation = parsed.query.operation || 'find';
+      
+      // Executa consulta
+      const queryResult = await this.executeDynamicQuery(parsed.query);
+      
+      // Gera resposta conversacional
+      const aiResponse = await this.generateConversationalResponse(
+        question, 
+        queryResult, 
+        parsed.interpretation
+      );
+      
+      const result = {
+        question,
+        aiResponse,
+        result: queryResult,
+        totalResults: Array.isArray(queryResult) ? queryResult.length : 1,
+        timestamp: new Date(),
+        sessionId,
+        usedFallback: false
+      };
+      
+      // Salva no contexto (máx 10)
+      context.history.push({
+        question,
+        response: result,
+        timestamp: new Date()
+      });
+      if (context.history.length > 10) {
+        context.history = context.history.slice(-10);
       }
       
-      // Executa a consulta
-      const queryResult = await this.executeDynamicQuery(parsed.query);
+      return result;
+      
+    } catch (error: any) {
+      this.logger.error('Error in contextual query processing:', {
+        error: error.message,
+        stack: error.stack,
+        question,
+        sessionId
+      });
       
       return {
         question,
-        interpretation: parsed.interpretation,
-        query: parsed.query,
-        result: queryResult,
-        explanation: parsed.explanation,
-        timestamp: new Date()
+        error: `Erro ao processar pergunta: ${error.message}`,
+        aiResponse: 'Desculpe, ocorreu um erro ao processar sua pergunta. Tente reformular de forma mais específica.',
+        suggestion: 'Tente perguntas como: "quantos pacientes cadastrados?" ou "listar produtos em estoque"',
+        timestamp: new Date(),
+        sessionId
       };
-    } catch (error) {
-      this.logger.error('Erro no processamento de linguagem natural:', {
-        error: error.message,
-        stack: error.stack,
-        question
+    }
+  }
+
+  /**
+   * Constrói SQL com suporte a JOINs e relacionamentos
+   */
+  private buildRelationalSQLQuery(schema: DatabaseSchema, query: DatabaseQuery): { sql: string; parameters: any[] } {
+    let sql = '';
+    const parameters: any[] = [];
+    const selectFields: string[] = [];
+
+    // Campos da tabela principal
+    selectFields.push(`${schema.tableName}.*`);
+
+    switch (query.operation || 'find') {
+      case 'find':
+      case 'join':
+        sql = `SELECT ${selectFields.join(', ')} FROM ${schema.tableName}`;
+        break;
+      case 'count':
+        sql = `SELECT COUNT(DISTINCT ${schema.tableName}.id) as total FROM ${schema.tableName}`;
+        break;
+      default:
+        throw new BadRequestException(`Operação '${query.operation}' não suportada`);
+    }
+
+    // JOINs
+    if (query.joins && query.joins.length > 0) {
+      for (const join of query.joins) {
+        const joinType = join.type || 'LEFT';
+        sql += ` ${joinType} JOIN ${join.table} ON ${join.on}`;
+
+        if (join.select && join.select.length > 0) {
+          const joinFields = join.select.map(field => `${join.table}.${field} as ${join.table}_${field}`);
+          selectFields.push(...joinFields);
+        }
+      }
+
+      // Reconstrói o SELECT com campos dos JOINs (se não for count)
+      if (query.operation !== 'count') {
+        sql = sql.replace(`SELECT ${schema.tableName}.*`, `SELECT ${selectFields.join(', ')}`);
+      }
+    }
+
+    // WHERE (suporta "tabela.campo")
+    if (query.conditions && Object.keys(query.conditions).length > 0) {
+      const whereConditions: string[] = [];
+
+      for (const [field, value] of Object.entries(query.conditions)) {
+        if (value === undefined || value === null) continue;
+
+        const [tableName, columnName] = field.includes('.')
+          ? field.split('.')
+          : [schema.tableName, field];
+
+        if (typeof value === 'object' && value !== null) {
+          const v: any = value;
+          if (v.gte && v.lte) {
+            whereConditions.push(`${tableName}.${columnName} >= ? AND ${tableName}.${columnName} <= ?`);
+            parameters.push(v.gte, v.lte);
+          } else if (v.gte) {
+            whereConditions.push(`${tableName}.${columnName} >= ?`);
+            parameters.push(v.gte);
+          } else if (v.lte) {
+            whereConditions.push(`${tableName}.${columnName} <= ?`);
+            parameters.push(v.lte);
+          }
+        } else {
+          whereConditions.push(`${tableName}.${columnName} LIKE ?`);
+          parameters.push(`%${value}%`);
+        }
+      }
+
+      if (whereConditions.length > 0) {
+        sql += ` WHERE ${whereConditions.join(' AND ')}`;
+      }
+    }
+
+    // GROUP BY
+    if (query.groupBy && query.groupBy.length > 0) {
+      sql += ` GROUP BY ${query.groupBy.join(', ')}`;
+    }
+
+    // ORDER BY (suporta "tabela.campo")
+    if (query.orderBy && Object.keys(query.orderBy).length > 0) {
+      const orderClauses = Object.entries(query.orderBy).map(([field, direction]) => {
+        const [tableName, columnName] = field.includes('.') ? field.split('.') : [schema.tableName, field];
+        return `${tableName}.${columnName} ${direction}`;
       });
-      throw new InternalServerErrorException(`Erro ao processar pergunta: ${error.message}`);
-    }
-  }
-
-  // Sistema de alertas inteligentes (versão unificada)
-  async createAlertRule(rule: Omit<AlertRule, 'id'>): Promise<AlertRule> {
-    const alertRule: AlertRule = {
-      ...rule,
-      id: `alert_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      createdAt: new Date()
-    };
-    
-    this.alertRules.set(alertRule.id, alertRule);
-    return alertRule;
-  }
-
-  async getActiveAlerts(): Promise<AlertRule[]> {
-    return Array.from(this.alertRules.values()).filter(rule => rule.isActive);
-  }
-
-  async deleteAlertRule(id: string): Promise<void> {
-    this.alertRules.delete(id);
-  }
-
-  @Cron(CronExpression.EVERY_HOUR)
-  async checkAlerts(): Promise<void> {
-    const activeRules = await this.getActiveAlerts();
-    
-    for (const rule of activeRules) {
-      try {
-        const shouldTrigger = await this.evaluateAlertCondition(rule);
-        if (shouldTrigger) {
-          await this.triggerAlert(rule);
-        }
-      } catch (error) {
-        this.logger.error(`Error checking alert ${rule.id}: ${error.message}`);
+      sql += ` ORDER BY ${orderClauses.join(', ')}`;
+    } else {
+      const createdColumn = schema.columns.find(col => col.name.toLowerCase().includes('created'));
+      if (createdColumn) {
+        sql += ` ORDER BY ${schema.tableName}.${createdColumn.name} DESC`;
       }
     }
-  }
 
-    async dailyIntelligentAssistant(action: string, context?: any): Promise<any> {
-    try {
-      const prompt = `
-        Você é um assistente inteligente diário. 
-        Ação solicitada: ${action}
-        Contexto: ${JSON.stringify(context || {})}
-        
-        Execute a ação solicitada de forma inteligente e retorne o resultado.
-        Ações possíveis: 'resumo_diario', 'alertas_pendentes', 'sugestoes_otimizacao', 'relatorio_performance'
-        
-        Responda em JSON: { "resultado": "...", "detalhes": "...", "sugestoes": [] }
-      `;
-
-      const mensagens = [{ role: 'user', content: prompt }];
-      const resposta = await conversarComIA(mensagens);
-      
-      try {
-        return JSON.parse(resposta.content);
-      } catch {
-        return {
-          resultado: resposta.content,
-          detalhes: 'Assistente executado com sucesso',
-          sugestoes: []
-        };
-      }
-    } catch (error) {
-      this.logger.error('Erro no assistente diário:', error);
-      return {
-        resultado: 'Erro no assistente diário',
-        detalhes: error.message,
-        sugestoes: ['Verificar configuração do serviço de IA']
-      };
+    // LIMIT / OFFSET
+    if (query.limit) {
+      sql += ` LIMIT ${query.limit}`;
     }
-  }
-
-  private async evaluateAlertCondition(rule: AlertRule): Promise<boolean> {
-    // Implementar lógica de avaliação de condições baseada na regra
-    return false;
-  }
-
-  private async triggerAlert(rule: AlertRule): Promise<void> {
-    this.logger.warn(`Alert triggered: ${rule.name}`);
-    
-    for (const action of rule.actions) {
-      await this.executeAlertAction(action, rule);
+    if (query.offset) {
+      sql += ` OFFSET ${query.offset}`;
     }
-    
-    rule.lastTriggered = new Date();
-    this.alertRules.set(rule.id, rule);
-  }
 
-  private async executeAlertAction(action: AlertAction, rule: AlertRule): Promise<void> {
-    switch (action.type) {
-      case 'email':
-        this.logger.log(`Email alert sent to ${action.target}`);
-        break;
-      case 'notification':
-        this.logger.log(`Notification sent: ${action.message}`);
-        break;
-      case 'webhook':
-        this.logger.log(`Webhook called: ${action.target}`);
-        break;
-    }
-  }
-
-  async generateIntelligentReport(request: string): Promise<RelatorioResultado> {
-    try {
-      const config = await this.parseReportRequest(request);
-      return await this.gerarRelatorio(config);
-    } catch (error) {
-      return {
-        id: this.gerarIdRelatorio(),
-        titulo: 'Erro na geração inteligente',
-        conteudo: error.message,
-        metadados: {
-          modulo: 'ai-agent',
-          tipo: 'erro',
-          dataGeracao: new Date(),
-          totalRegistros: 0
-        }
-      };
-    }
-  }
-
-  private async parseReportRequest(request: string): Promise<RelatorioConfig> {
-    // Implementar parsing inteligente da solicitação
-    return {
-      modulo: 'general',
-      tipo: 'personalizado',
-      formato: 'texto'
-    };
-  }
-
-  private generateCacheKey(query: DatabaseQuery): string {
-    return `query_${JSON.stringify(query)}`;
+    return { sql, parameters };
   }
 }
