@@ -8,6 +8,7 @@ import {
   Body,
   Query,
   Req,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { MedicalRecordsService } from './medical-records.service';
@@ -30,12 +31,18 @@ export class MedicalRecordsController {
         diagnosis: { type: 'string', example: 'Gripe comum', description: 'Diagnóstico do paciente' },
         treatment: { type: 'string', example: 'Repouso e medicação', description: 'Tratamento prescrito' },
         notes: { type: 'string', example: 'Paciente apresentou febre e tosse.', description: 'Observações adicionais' },
+        doctorId: { type: 'string', example: '60d0fe4f5e2a7b001c8e4a1c', description: 'ID do médico (opcional se autenticado)' },
       },
       required: ['patientId', 'recordDate', 'diagnosis', 'treatment'],
     },
   })
   async create(@Body() body: any, @Req() req) {
-    return this.medicalRecordsService.create(body, req.user.id);
+    // Verificar se há usuário autenticado ou doctorId no body
+    const userId = req.user?.id || body.doctorId;
+    if (!userId) {
+      throw new UnauthorizedException('Usuário não autenticado ou doctorId não fornecido');
+    }
+    return this.medicalRecordsService.createRecord(body, userId);
   }
 
   @Get()
@@ -44,8 +51,9 @@ export class MedicalRecordsController {
   @ApiQuery({ name: 'patientId', required: false, type: String, description: 'Filtrar por ID do paciente' })
   @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Limite de registros por página' })
   @ApiQuery({ name: 'offset', required: false, type: Number, description: 'Deslocamento para paginação' })
-  async findAll(@Query() query: any) {
-    return this.medicalRecordsService.findAll(query);
+  async findAll(@Query() query: any, @Req() req) {
+    const userId = req.user?.id;
+    return this.medicalRecordsService.findAll(query, userId);
   }
 
   @Get(':id')
@@ -53,8 +61,9 @@ export class MedicalRecordsController {
   @ApiResponse({ status: 200, description: 'Medical record found.' })
   @ApiResponse({ status: 404, description: 'Medical record not found.' })
   @ApiParam({ name: 'id', description: 'ID do prontuário médico', type: String, example: '60d0fe4f5e2a7b001c8e4a1b' })
-  async findOne(@Param('id') id: string) {
-    return this.medicalRecordsService.findOne(id);
+  async findOne(@Param('id') id: string, @Req() req) {
+    const userId = req.user?.id;
+    return this.medicalRecordsService.findOne(id, userId);
   }
 
   @Put(':id')
@@ -71,11 +80,16 @@ export class MedicalRecordsController {
         diagnosis: { type: 'string', example: 'Recuperado de gripe', description: 'Novo diagnóstico' },
         treatment: { type: 'string', example: 'Alta médica', description: 'Novo tratamento' },
         notes: { type: 'string', example: 'Paciente sem sintomas.', description: 'Novas observações' },
+        doctorId: { type: 'string', example: '60d0fe4f5e2a7b001c8e4a1c', description: 'ID do médico (opcional se autenticado)' },
       },
     },
   })
   async update(@Param('id') id: string, @Body() body: any, @Req() req) {
-    return this.medicalRecordsService.update(id, body, req.user.id);
+    const userId = req.user?.id || body.doctorId;
+    if (!userId) {
+      throw new UnauthorizedException('Usuário não autenticado ou doctorId não fornecido');
+    }
+    return this.medicalRecordsService.update(id, body, userId);
   }
 
   @Delete(':id')
@@ -83,8 +97,12 @@ export class MedicalRecordsController {
   @ApiResponse({ status: 200, description: 'Medical record deleted successfully.' })
   @ApiResponse({ status: 404, description: 'Medical record not found.' })
   @ApiParam({ name: 'id', description: 'ID do prontuário médico a ser removido', type: String, example: '60d0fe4f5e2a7b001c8e4a1b' })
-  async remove(@Param('id') id: string, @Req() req) {
-    return this.medicalRecordsService.remove(id, req.user.id);
+  async remove(@Param('id') id: string, @Req() req, @Body() body: any) {
+    const userId = req.user?.id || body.doctorId;
+    if (!userId) {
+      throw new UnauthorizedException('Usuário não autenticado ou doctorId não fornecido');
+    }
+    return this.medicalRecordsService.remove(id, userId);
   }
 
   @Get('patients/:patientId/timeline')
@@ -96,6 +114,7 @@ export class MedicalRecordsController {
   @ApiQuery({ name: 'startDate', required: false, type: String, format: 'date', description: 'Filtrar por data inicial' })
   @ApiQuery({ name: 'endDate', required: false, type: String, format: 'date', description: 'Filtrar por data final' })
   async getPatientTimeline(@Param('patientId') patientId: string, @Query() query: any, @Req() req) {
-      return this.medicalRecordsService.getPatientTimeline(patientId, query, req.user?.id);
+      const userId = req.user?.id;
+      return this.medicalRecordsService.getPatientTimeline(patientId, query, userId);
   }
 }
