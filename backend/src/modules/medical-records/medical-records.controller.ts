@@ -117,4 +117,41 @@ export class MedicalRecordsController {
       const userId = req.user?.id;
       return this.medicalRecordsService.getPatientTimeline(patientId, query, userId);
   }
+
+  // Novos endpoints para Gestão de Pacientes
+  @Get('patients')
+  @ApiOperation({ summary: 'Get all patients with medical records' })
+  @ApiResponse({ status: 200, description: 'List of patients with medical records.' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Limite de registros por página' })
+  @ApiQuery({ name: 'offset', required: false, type: Number, description: 'Deslocamento para paginação' })
+  @ApiQuery({ name: 'search', required: false, type: String, description: 'Buscar por nome do paciente' })
+  async getAllPatients(@Query() query: any, @Req() req) {
+    const userId = req.user?.id;
+    return this.medicalRecordsService.getAllPatients(query, userId);
+  }
+
+  @Get('patients/:patientId/summary')
+  @ApiOperation({ summary: 'Get patient summary with statistics' })
+  @ApiResponse({ status: 200, description: 'Patient summary retrieved successfully.' })
+  @ApiResponse({ status: 404, description: 'Patient not found.' })
+  @ApiParam({ name: 'patientId', description: 'ID do paciente', type: String, example: '60d0fe4f5e2a7b001c8e4a1b' })
+  async getPatientSummary(@Param('patientId') patientId: string, @Req() req) {
+    const userId = req.user?.id;
+    return this.medicalRecordsService.getPatientSummary(patientId, userId);
+  }
+
+  @Get('patients/:patientId/history')
+  @ApiOperation({ summary: 'Get complete patient history' })
+  @ApiResponse({ status: 200, description: 'Patient history retrieved successfully.' })
+  @ApiResponse({ status: 404, description: 'Patient not found.' })
+  @ApiParam({ name: 'patientId', description: 'ID do paciente', type: String, example: '60d0fe4f5e2a7b001c8e4a1b' })
+  @ApiQuery({ name: 'category', required: false, type: String, description: 'Filtrar por categoria' })
+  @ApiQuery({ name: 'startDate', required: false, type: String, format: 'date', description: 'Data inicial' })
+  @ApiQuery({ name: 'endDate', required: false, type: String, format: 'date', description: 'Data final' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Limite de registros' })
+  @ApiQuery({ name: 'offset', required: false, type: Number, description: 'Deslocamento' })
+  async getPatientHistory(@Param('patientId') patientId: string, @Query() query: any, @Req() req) {
+    const userId = req.user?.id;
+    return this.medicalRecordsService.getPatientHistory(patientId, query, userId);
+  }
 }

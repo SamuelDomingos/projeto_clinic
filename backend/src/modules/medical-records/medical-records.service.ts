@@ -146,5 +146,142 @@ export class MedicalRecordsService {
     return this.deleteRecord(id, userId);
   }
 
+  // Novos métodos para Gestão de Pacientes
+  async getAllPatients(query: any = {}, userId?: string) {
+    const { limit = 10, offset = 0, search } = query;
+    
+    // Query builder para buscar pacientes que têm prontuários
+    const queryBuilder = this.medicalRecordRepository
+      .createQueryBuilder('record')
+      .leftJoinAndSelect('record.patient', 'patient')
+      .leftJoinAndSelect('record.doctor', 'doctor')
+      .select([
+        'patient.id',
+        'patient.name', 
+        'patient.email',
+        'patient.phone',
+        'patient.birthDate',
+        'COUNT(record.id) as totalRecords',
+        'MAX(record.date) as lastVisit'
+      ])
+      .groupBy('patient.id, patient.name, patient.email, patient.phone, patient.birthDate');
+
+    // Filtrar por médico se userId fornecido
+    if (userId) {
+      queryBuilder.where('record.doctorId = :userId', { userId });
+    }
+
+    // Filtrar por nome se search fornecido
+    if (search) {
+      queryBuilder.andWhere('patient.name ILIKE :search', { search: `%${search}%` });
+    }
+
+    // Aplicar paginação
+    queryBuilder.limit(limit).offset(offset);
+
+    const patients = await queryBuilder.getRawMany();
+    
+    return {
+      patients,
+      total: patients.length,
+      limit,
+      offset
+    };
+  }
+
+  async getPatientSummary(patientId: string, userId?: string) {
+    // Verificar se o paciente existe
+    const patient = await this.patientRepository.findOne({ where: { id: patientId } });
+    if (!patient) {
+      throw new NotFoundException('Patient not found');
+    }
+
+    // Construir query base
+    const whereCondition: any = { patientId };
+    if (userId) {
+      whereCondition.doctorId = userId;
+    }
+
+    // Buscar estatísticas
+    const totalRecords = await this.medicalRecordRepository.count({ where: whereCondition });
+    
+    const lastRecord = await this.medicalRecordRepository.findOne({
+      where: whereCondition,
+      order: { date: 'DESC' },
+      relations: ['doctor']
+    });
+
+    // Contar por categoria
+    const categoryCounts = await this.medicalRecordRepository
+      .createQueryBuilder('record')
+      .select('record.recordCategory', 'category')
+      .addSelect('COUNT(*)', 'count')
+      .where('record.patientId = :patientId', { patientId })
+      .andWhere(userId ? 'record.doctorId = :userId' : '1=1', { userId })
+      .groupBy('record.recordCategory')
+      .getRawMany();
+
+    // Buscar últimos 5 registros
+    const recentRecords = await this.medicalRecordRepository.find({
+      where: whereCondition,
+      order: { date: 'DESC' },
+      take: 5,
+      relations: ['doctor']
+    });
+
+    return {
+      patient,
+      statistics: {
+        totalRecords,
+        lastVisit: lastRecord?.date,
+        lastDoctor: lastRecord?.doctor?.name,
+        categoryCounts
+      },
+      recentRecords
+    };
+  }
+
+  async getPatientHistory(patientId: string, query: any = {}, userId?: string) {
+    // Verificar se o paciente existe
+    const patient = await this.patientRepository.findOne({ where: { id: patientId } });
+    if (!patient) {
+      throw new NotFoundException('Patient not found');
+    }
+
+    const { category, startDate, endDate, limit = 20, offset = 0 } = query;
+    
+    // Construir condições where
+    const whereCondition: any = { patientId };
+    if (userId) {
+      whereCondition.doctorId = userId;
+    }
+    if (category) {
+      whereCondition.recordCategory = category;
+    }
+    if (startDate && endDate) {
+      whereCondition.date = Between(new Date(startDate), new Date(endDate));
+    }
+
+    // Buscar registros com paginação
+    const [records, total] = await this.medicalRecordRepository.findAndCount({
+      where: whereCondition,
+      order: { date: 'DESC' },
+      take: limit,
+      skip: offset,
+      relations: ['doctor']
+    });
+
+    return {
+      patient,
+      records,
+      pagination: {
+        total,
+        limit,
+        offset,
+        pages: Math.ceil(total / limit)
+      }
+    };
+  }
+
   // Métodos para upload de foto, gerar relatório, etc., podem ser implementados conforme a infra disponível
 }
