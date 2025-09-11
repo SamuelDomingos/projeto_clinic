@@ -40,3 +40,52 @@ export interface PatientStatistics {
   inactivePatients: number;
   newPatientsThisMonth: number;
 }
+
+// Novas interfaces para histórico médico
+export interface MedicalHistoryItem {
+  id: string;
+  date: Date;
+  type: 'appointment' | 'medical_record';
+  title: string;
+  description: string;
+  doctorName?: string;
+  status?: string;
+  category?: string;
+  attachments?: any[];
+  prescriptionData?: any;
+  examRequestData?: any;
+}
+
+export interface PatientMedicalHistory {
+  patient: {
+    id: string;
+    name: string;
+    email: string;
+    phone: string;
+    birthDate: string;
+    cpf: string;
+    bloodType?: string;
+    allergies?: any[];
+    insurance?: string;
+    totalSessions: number;
+    lastVisit?: Date;
+  };
+  history: MedicalHistoryItem[];
+  summary: {
+    totalAppointments: number;
+    completedAppointments: number;
+    totalMedicalRecords: number;
+    lastAppointment?: Date;
+    lastMedicalRecord?: Date;
+  };
+}
+
+export interface MedicalHistoryQuery {
+  startDate?: string;
+  endDate?: string;
+  type?: 'appointment' | 'medical_record' | 'all';
+  category?: string;
+  doctorId?: string;
+  page?: number;
+  limit?: number;
+}

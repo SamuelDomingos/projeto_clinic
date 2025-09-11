@@ -777,18 +777,23 @@ CONTEXTO DA CONVERSA:\n${conversationHistory}\n\nESTRUTURA DO BANCO:\n${JSON.str
       // Executa consulta
       const queryResult = await this.executeDynamicQuery(parsed.query);
       
+      // Filtra dados sensíveis
+      const filteredResult = Array.isArray(queryResult) 
+        ? this.filterSensitiveData(queryResult, parsed.query.entity)
+        : queryResult;
+      
       // Gera resposta conversacional
       const aiResponse = await this.generateConversationalResponse(
         question, 
-        queryResult, 
+        filteredResult,  // Usa dados filtrados
         parsed.interpretation
       );
       
       const result = {
         question,
         aiResponse,
-        result: queryResult,
-        totalResults: Array.isArray(queryResult) ? queryResult.length : 1,
+        result: filteredResult,  // Retorna dados filtrados
+        totalResults: Array.isArray(filteredResult) ? filteredResult.length : 1,
         timestamp: new Date(),
         sessionId,
         usedFallback: false
@@ -832,13 +837,30 @@ CONTEXTO DA CONVERSA:\n${conversationHistory}\n\nESTRUTURA DO BANCO:\n${JSON.str
     let sql = '';
     const parameters: any[] = [];
     const selectFields: string[] = [];
-
+  
     // Campos da tabela principal
     selectFields.push(`${schema.tableName}.*`);
-
+  
     switch (query.operation || 'find') {
       case 'find':
       case 'join':
+        // JOINs
+        if (query.joins && query.joins.length > 0) {
+          for (const join of query.joins) {
+            if (join.select && join.select.length > 0) {
+              const joinFields = join.select.map(field => {
+                // Verifica se o campo já contém alias (" as ")
+                if (field.toLowerCase().includes(' as ')) {
+                  return `${join.table}.${field}`;
+                } else {
+                  return `${join.table}.${field} as ${join.table}_${field}`;
+                }
+              });
+              selectFields.push(...joinFields);
+            }
+          }
+        }
+        
         sql = `SELECT ${selectFields.join(', ')} FROM ${schema.tableName}`;
         break;
       case 'count':
@@ -847,36 +869,26 @@ CONTEXTO DA CONVERSA:\n${conversationHistory}\n\nESTRUTURA DO BANCO:\n${JSON.str
       default:
         throw new BadRequestException(`Operação '${query.operation}' não suportada`);
     }
-
+  
     // JOINs
     if (query.joins && query.joins.length > 0) {
       for (const join of query.joins) {
         const joinType = join.type || 'LEFT';
         sql += ` ${joinType} JOIN ${join.table} ON ${join.on}`;
-
-        if (join.select && join.select.length > 0) {
-          const joinFields = join.select.map(field => `${join.table}.${field} as ${join.table}_${field}`);
-          selectFields.push(...joinFields);
-        }
-      }
-
-      // Reconstrói o SELECT com campos dos JOINs (se não for count)
-      if (query.operation !== 'count') {
-        sql = sql.replace(`SELECT ${schema.tableName}.*`, `SELECT ${selectFields.join(', ')}`);
       }
     }
-
+  
     // WHERE (suporta "tabela.campo")
     if (query.conditions && Object.keys(query.conditions).length > 0) {
       const whereConditions: string[] = [];
-
+  
       for (const [field, value] of Object.entries(query.conditions)) {
         if (value === undefined || value === null) continue;
-
+  
         const [tableName, columnName] = field.includes('.')
           ? field.split('.')
           : [schema.tableName, field];
-
+  
         if (typeof value === 'object' && value !== null) {
           const v: any = value;
           if (v.gte && v.lte) {
@@ -894,17 +906,17 @@ CONTEXTO DA CONVERSA:\n${conversationHistory}\n\nESTRUTURA DO BANCO:\n${JSON.str
           parameters.push(`%${value}%`);
         }
       }
-
+  
       if (whereConditions.length > 0) {
         sql += ` WHERE ${whereConditions.join(' AND ')}`;
       }
     }
-
+  
     // GROUP BY
     if (query.groupBy && query.groupBy.length > 0) {
       sql += ` GROUP BY ${query.groupBy.join(', ')}`;
     }
-
+  
     // ORDER BY (suporta "tabela.campo")
     if (query.orderBy && Object.keys(query.orderBy).length > 0) {
       const orderClauses = Object.entries(query.orderBy).map(([field, direction]) => {
@@ -918,7 +930,7 @@ CONTEXTO DA CONVERSA:\n${conversationHistory}\n\nESTRUTURA DO BANCO:\n${JSON.str
         sql += ` ORDER BY ${schema.tableName}.${createdColumn.name} DESC`;
       }
     }
-
+  
     // LIMIT / OFFSET
     if (query.limit) {
       sql += ` LIMIT ${query.limit}`;
@@ -926,7 +938,23 @@ CONTEXTO DA CONVERSA:\n${conversationHistory}\n\nESTRUTURA DO BANCO:\n${JSON.str
     if (query.offset) {
       sql += ` OFFSET ${query.offset}`;
     }
-
+  
     return { sql, parameters };
+  }
+
+  private filterSensitiveData(data: any[], entityType: string): any[] {
+    const sensitiveFields = {
+      patients: ['cpf', 'rg', 'email', 'phone', 'address', 'birthDate'],
+      users: ['password', 'email', 'phone', 'cpf'],
+      medical_records: ['content', 'attachments', 'diagnosis']
+    };
+    
+    const fieldsToRemove = sensitiveFields[entityType] || [];
+    
+    return data.map(item => {
+      const filtered = { ...item };
+      fieldsToRemove.forEach(field => delete filtered[field]);
+      return filtered;
+    });
   }
 }

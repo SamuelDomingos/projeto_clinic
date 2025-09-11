@@ -118,4 +118,21 @@ export class UsersService {
   remove(id: string) {
     return this.delete(id);
   }
-} 
+
+  async uploadPhoto(id: string, filename: string) {
+    const user = await this.userRepository.findOne({ where: { id } });
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+    
+    // Atualizar o campo photo do usuário
+    user.photo = `/uploads/users/${filename}`;
+    
+    // Salvar no banco de dados
+    await this.userRepository.save(user);
+    
+    // Retornar usuário sem a senha
+    const { password, ...userWithoutPassword } = user;
+    return userWithoutPassword;
+  }
+}
