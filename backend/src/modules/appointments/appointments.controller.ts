@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { AppointmentsService } from './appointments.service';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiQuery, ApiParam } from '@nestjs/swagger';
+import { BlockedTime } from './entities/blocked-time.entity';
 
 @ApiTags('appointments')
 @Controller('appointments')
@@ -118,6 +119,68 @@ export class AppointmentsController {
   @ApiResponse({ status: 400, description: 'Requisição inválida. Verifique os dados enviados.' })
   async create(@Body() body: any) {
     return this.appointmentsService.create(body);
+  }
+
+  @Post('blocked-times')
+  @ApiOperation({ summary: 'Bloquear horário para um médico' })
+  @ApiResponse({ status: 201, description: 'Horário bloqueado com sucesso.' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        doctorId: { type: 'string', example: 'uuid-do-medico' },
+        startDateTime: { type: 'string', format: 'date-time', example: '2024-01-15T09:00:00Z' },
+        endDateTime: { type: 'string', format: 'date-time', example: '2024-01-15T12:00:00Z' },
+        type: { type: 'string', enum: ['vacation', 'break', 'meeting', 'personal', 'maintenance'], example: 'break' },
+        reason: { type: 'string', example: 'Pausa para almoço' }
+      },
+      required: ['doctorId', 'startDateTime', 'endDateTime']
+    }
+  })
+  createBlockedTime(@Body() body: Partial<BlockedTime>) {
+    return this.appointmentsService.createBlockedTime(body);
+  }
+
+  @Get('blocked-times/:doctorId')
+  @ApiOperation({ summary: 'Listar horários bloqueados de um médico' })
+  @ApiParam({ name: 'doctorId', description: 'ID do médico' })
+  @ApiQuery({ name: 'startDate', required: false, type: 'string', format: 'date' })
+  @ApiQuery({ name: 'endDate', required: false, type: 'string', format: 'date' })
+  getBlockedTimes(
+    @Param('doctorId') doctorId: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string
+  ) {
+    const start = startDate ? new Date(startDate) : undefined;
+    const end = endDate ? new Date(endDate) : undefined;
+    return this.appointmentsService.getBlockedTimes(doctorId, start, end);
+  }
+
+  @Delete('blocked-times/:id')
+  @ApiOperation({ summary: 'Remover bloqueio de horário' })
+  @ApiParam({ name: 'id', description: 'ID do horário bloqueado' })
+  removeBlockedTime(@Param('id') id: string) {
+    return this.appointmentsService.removeBlockedTime(id);
+  }
+
+  @Get('availability/:doctorId')
+  @ApiOperation({ summary: 'Verificar disponibilidade de horário' })
+  @ApiParam({ name: 'doctorId', description: 'ID do médico' })
+  @ApiQuery({ name: 'date', type: 'string', format: 'date', example: '2024-01-15' })
+  @ApiQuery({ name: 'startTime', type: 'string', example: '09:00' })
+  @ApiQuery({ name: 'duration', required: false, type: 'number', example: 30 })
+  checkAvailability(
+    @Param('doctorId') doctorId: string,
+    @Query('date') date: string,
+    @Query('startTime') startTime: string,
+    @Query('duration') duration?: number
+  ) {
+    return this.appointmentsService.checkAvailability(
+      doctorId, 
+      new Date(date), 
+      startTime, 
+      duration || 30
+    );
   }
 
   /**
