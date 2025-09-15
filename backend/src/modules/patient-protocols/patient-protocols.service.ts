@@ -5,6 +5,7 @@ import { PatientProtocol } from './entities/patient-protocol.entity';
 import { PatientServiceSession } from '../patient-service-sessions/entities/patient-service-session.entity';
 import { Protocol } from '../protocols/entities/protocol.entity';
 import { ProtocolService as ProtocolServiceEntity } from '../protocol-services/entities/protocol-service.entity';
+import { InstallmentInvoicesService } from '../installment-invoices/installment-invoices.service';
 
 @Injectable()
 export class PatientProtocolsService {
@@ -18,21 +19,28 @@ export class PatientProtocolsService {
     @InjectRepository(ProtocolServiceEntity)
     private readonly protocolServiceRepository: Repository<ProtocolServiceEntity>,
     private readonly dataSource: DataSource,
+    private readonly installmentInvoicesService: InstallmentInvoicesService,
   ) {}
 
-  async create(data: any) {
+  async create(data: any, generateInvoice: boolean = true, invoiceData?: {
+    totalInstallments: number;
+    firstDueDate: Date;
+    notes?: string;
+  }) {
     return this.dataSource.transaction(async manager => {
       console.log('Iniciando criação do PatientProtocol com dados:', data);
       // Cria o PatientProtocol normalmente
       const patientProtocol = manager.create(PatientProtocol, data);
       const savedPatientProtocol = await manager.save(patientProtocol);
       console.log('PatientProtocol salvo:', savedPatientProtocol);
+      
       // Busca os serviços do protocolo
       const protocol = await manager.findOne(Protocol, {
         where: { id: savedPatientProtocol.protocolId },
         relations: ['protocolServices'],
       });
       console.log('Protocol encontrado:', protocol);
+      
       if (!protocol || !protocol.protocolServices || protocol.protocolServices.length === 0) {
         console.log('Protocolo não possui serviços associados. Não é possível criar sessões.');
         throw new NotFoundException('Protocolo não possui serviços associados. Não é possível criar sessões.');
@@ -62,6 +70,22 @@ export class PatientProtocolsService {
         } else {
           console.log('Sessão já existe:', exists);
         }
+      }
+      
+      // Gerar fatura parcelada automaticamente se solicitado
+      if (generateInvoice && invoiceData) {
+        console.log('Gerando fatura parcelada para o protocolo:', savedPatientProtocol.id);
+        
+        await this.installmentInvoicesService.createInstallmentInvoice({
+          patientId: savedPatientProtocol.patientId,
+          protocolId: savedPatientProtocol.protocolId,
+          patientProtocolId: savedPatientProtocol.id,
+          totalInstallments: invoiceData.totalInstallments,
+          firstDueDate: invoiceData.firstDueDate,
+          notes: invoiceData.notes,
+        });
+        
+        console.log('Fatura parcelada gerada com sucesso');
       }
       
       console.log('Finalizando criação do PatientProtocol:', savedPatientProtocol.id);
